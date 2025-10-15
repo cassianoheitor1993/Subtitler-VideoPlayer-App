@@ -5,13 +5,12 @@
             "name": "SubtitlePlayer: Run Application",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/src/video_player.py",
+            "program": "${workspaceFolder}/launch.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "cwd": "${workspaceFolder}",
             "python": "/home/cmedeiros/Documents/Cassiano-Portfolio/.venv/bin/python",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}/src",
                 "VLC_VERBOSE": "-1"
             }
         },

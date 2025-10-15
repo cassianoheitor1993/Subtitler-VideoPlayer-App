@@ -603,11 +603,32 @@ class VideoPlayer(QMainWindow):
         return f"{hours:02d}:{minutes:02d}:{secs:02d}"
     
     def toggle_fullscreen(self):
-        """Toggle fullscreen mode"""
+        """Toggle fullscreen mode with proper escape handling"""
         if self.isFullScreen():
             self.showNormal()
+            # Re-enable menu bar and status bar
+            self.menuBar().show()
+            self.statusBar().show()
         else:
             self.showFullScreen()
+            # Keep menu bar visible in fullscreen for easy exit
+            self.menuBar().show()
+            self.statusBar().hide()
+    
+    def keyPressEvent(self, event):
+        """Handle key press events"""
+        # ESC key exits fullscreen
+        if event.key() == Qt.Key.Key_Escape:
+            if self.isFullScreen():
+                self.toggle_fullscreen()
+        # F key toggles fullscreen
+        elif event.key() == Qt.Key.Key_F:
+            self.toggle_fullscreen()
+        # Space bar plays/pauses
+        elif event.key() == Qt.Key.Key_Space:
+            self.play_pause()
+        else:
+            super().keyPressEvent(event)
     
     def video_double_click(self, event):
         """Handle double-click on video frame to toggle fullscreen"""
@@ -774,8 +795,13 @@ class VideoPlayer(QMainWindow):
         event.accept()
 
 
-if __name__ == "__main__":
+def main():
+    """Main entry point for SubtitlePlayer"""
     app = QApplication(sys.argv)
     player = VideoPlayer()
     player.show()
     sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()

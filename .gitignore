@@ -25,7 +25,7 @@ var/
 *.ui~
 
 # IDE
-.vscode/
+# .vscode/ - Keep debugger config in repo for easy setup
 .idea/
 *.swp
 *.swo
