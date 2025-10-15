@@ -15,6 +15,11 @@ from PyQt6.QtCore import Qt, QTimer, QUrl
 from PyQt6.QtGui import QAction, QPalette, QColor, QFont, QPainter, QPen
 import vlc
 
+# Suppress VLC warnings and debug messages
+os.environ['VLC_VERBOSE'] = '-1'
+import warnings
+warnings.filterwarnings('ignore')
+
 from subtitle_parser import SubtitleParser, SubtitleEntry
 from config_manager import ConfigManager, SubtitleStyle
 
@@ -115,8 +120,15 @@ class VideoPlayer(QMainWindow):
         self.current_subtitles = []
         self.subtitle_style = SubtitleStyle()
         
-        # VLC setup
-        self.instance = vlc.Instance('--no-xlib')
+        # VLC setup with suppressed logging
+        vlc_args = [
+            '--no-xlib',
+            '--quiet',
+            '--no-video-title-show',
+            '--no-audio-display',
+            '--avcodec-hw=none',  # Disable hardware acceleration to avoid errors
+        ]
+        self.instance = vlc.Instance(' '.join(vlc_args))
         self.media_player = self.instance.media_player_new()
         
         # Timer for updating UI

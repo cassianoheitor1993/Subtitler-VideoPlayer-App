@@ -194,18 +194,28 @@ pip install openai-whisper torch torchvision torchaudio --index-url https://down
         
         try:
             # Extract audio from video
+            import time
+            start_time = time.time()
+            
             if progress_callback:
-                progress_callback("Extracting audio...", 10)
+                progress_callback("📹 Extracting audio from video...", 10)
             
             audio_path = Path(video_path).with_suffix('.wav')
             if not self.extract_audio(video_path, str(audio_path)):
                 if progress_callback:
-                    progress_callback("Failed to extract audio", 0)
+                    progress_callback("❌ Failed to extract audio", 0)
                 return None
+            
+            elapsed = int(time.time() - start_time)
+            if progress_callback:
+                progress_callback(f"✓ Audio extracted ({elapsed}s)", 20)
             
             # Transcribe with Whisper
             if progress_callback:
-                progress_callback("Transcribing audio (this may take a while)...", 30)
+                import torch
+                device = "GPU (CUDA)" if torch.cuda.is_available() else "CPU"
+                progress_callback(f"🤖 Transcribing with Whisper ({self.model_size} model on {device})...", 30)
+                progress_callback("⏳ This may take a while, please be patient...", 35)
             
             options = {
                 'task': 'transcribe',
@@ -214,7 +224,12 @@ pip install openai-whisper torch torchvision torchaudio --index-url https://down
             if language:
                 options['language'] = language
             
+            transcribe_start = time.time()
             result = self.model.transcribe(str(audio_path), **options)
+            transcribe_elapsed = int(time.time() - transcribe_start)
+            
+            if progress_callback:
+                progress_callback(f"✓ Transcription complete ({transcribe_elapsed}s)", 70)
             
             # Clean up audio file
             try:
@@ -224,7 +239,7 @@ pip install openai-whisper torch torchvision torchaudio --index-url https://down
             
             # Convert to subtitle segments
             if progress_callback:
-                progress_callback("Processing results...", 80)
+                progress_callback("📝 Processing subtitle segments...", 80)
             
             segments = []
             for segment in result['segments']:

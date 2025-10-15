@@ -163,6 +163,19 @@ class AISubtitleDialog(QDialog):
         progress_group.setLayout(progress_layout)
         layout.addWidget(progress_group)
         
+        # Log section (added for debugging)
+        log_group = QGroupBox("Processing Log")
+        log_layout = QVBoxLayout()
+        
+        self.log_text = QTextEdit()
+        self.log_text.setReadOnly(True)
+        self.log_text.setMaximumHeight(120)
+        self.log_text.setStyleSheet("font-family: monospace; font-size: 10px;")
+        log_layout.addWidget(self.log_text)
+        
+        log_group.setLayout(log_layout)
+        layout.addWidget(log_group)
+        
         # Preview section
         preview_group = QGroupBox("Preview (first 10 lines)")
         preview_layout = QVBoxLayout()
@@ -316,10 +329,25 @@ class AISubtitleDialog(QDialog):
         """Handle progress update"""
         self.status_label.setText(message)
         self.progress_bar.setValue(percent)
+        
+        # Add to log with timestamp
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self.log_text.append(f"[{timestamp}] {message}")
+        
+        # Auto-scroll to bottom
+        self.log_text.verticalScrollBar().setValue(
+            self.log_text.verticalScrollBar().maximum()
+        )
     
     def on_complete(self, segments):
         """Handle generation completion"""
         self.generated_segments = segments
+        
+        # Log completion
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self.log_text.append(f"[{timestamp}] ✓ Generation complete! {len(segments)} segments created")
         
         # Show preview
         preview_text = ""
@@ -342,6 +370,11 @@ class AISubtitleDialog(QDialog):
     
     def on_error(self, error):
         """Handle generation error"""
+        # Log error
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self.log_text.append(f"[{timestamp}] ❌ ERROR: {error}")
+        
         self.status_label.setText(f"Error: {error}")
         self.generate_btn.setEnabled(True)
         self.close_btn.setEnabled(True)
