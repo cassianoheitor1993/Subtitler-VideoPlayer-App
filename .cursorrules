@@ -1,0 +1,792 @@
+# SubtitlePlayer - AI Development Assistant Rules
+
+## Project Overview
+SubtitlePlayer is a professional Python-based video player for Linux with native subtitle download, AI generation, timing synchronization, and multi-language translation capabilities.
+
+**Tech Stack:**
+- Python 3.8+ with PyQt6 6.9.1
+- VLC 3.0.20+ (libvlc backend)
+- OpenSubtitles API v1
+- OpenAI Whisper (AI subtitle generation)
+- PyTorch 2.9.0+ with CUDA support
+- Translation APIs (googletrans/deep-translator)
+
+**Architecture:**
+- MVC pattern with Observer pattern for UI updates
+- Factory pattern for subtitle parsing (SRT/VTT/ASS)
+- Configuration management with JSON persistence
+- Modular design with clear separation of concerns
+
+---
+
+## Development Environment Setup
+
+### Virtual Environment
+```bash
+# Always activate the virtual environment first
+source /home/cmedeiros/Documents/Cassiano-Portfolio/.venv/bin/activate
+
+# Or use the full path for running scripts
+/home/cmedeiros/Documents/Cassiano-Portfolio/.venv/bin/python
+```
+
+### Running the Application
+```bash
+# From project root: /home/cmedeiros/Documents/Cassiano-Portfolio/Subtitler-App/SubtitlePlayer
+python launch.py
+
+# Or via debugger: Use VS Code launch configurations in .vscode/launch.json
+```
+
+### Project Structure
+```
+SubtitlePlayer/
+├── src/                          # Main source code
+│   ├── video_player.py          # Main application window (812 lines)
+│   ├── subtitle_settings_dialog.py  # Settings UI with responsive layout
+│   ├── subtitle_search_dialog.py    # OpenSubtitles search UI
+│   ├── ai_subtitle_dialog.py       # AI generation UI
+│   ├── subtitle_overlay.py         # Subtitle rendering overlay
+│   ├── subtitle_parser.py          # Parse SRT/VTT/ASS formats
+│   ├── subtitle_translator.py      # Multi-language translation
+│   ├── ai_subtitle_generator.py    # Whisper-based generation
+│   ├── config_manager.py           # JSON configuration persistence
+│   └── opensubtitles_api.py        # OpenSubtitles API client
+├── launch.py                     # Application launcher for debugging
+├── install.sh                    # Main installation script
+├── install-translation.sh        # Translation dependencies installer
+├── .vscode/                      # VS Code configuration (keep in repo)
+│   ├── launch.json              # Debugger configurations
+│   └── settings.json            # Python interpreter settings
+└── docs/                         # Documentation
+```
+
+---
+
+## Critical Development Guidelines
+
+### 1. VLC Integration
+**ALWAYS** configure VLC with these settings to avoid crashes and noise:
+```python
+vlc_instance = vlc.Instance(
+    "--quiet",
+    "--no-xlib",
+    "--no-video-title-show",
+    "--no-sub-autodetect-file"
+)
+# Set environment variable
+os.environ['VLC_VERBOSE'] = '-1'
+```
+
+**Fullscreen Safety:**
+- ALWAYS provide multiple exit methods (ESC, F key, menu, double-click)
+- NEVER hide menu bar completely in fullscreen mode
+- ALWAYS implement keyPressEvent() for ESC key handling
+- Test fullscreen entry/exit thoroughly - crashes require system restart!
+
+### 2. PyQt6 Best Practices
+
+**Dialog Initialization:**
+```python
+# ALWAYS pass necessary context to dialogs
+dialog = SubtitleSettingsDialog(
+    current_style=self.subtitle_style,
+    parent=self,
+    subtitles=self.current_subtitles,
+    current_time_func=lambda: self.media_player.get_time() / 1000.0
+)
+```
+
+**Responsive Layouts:**
+- Use QGridLayout for multi-column responsive designs
+- Implement resizeEvent() to rearrange layout based on width
+- Use QScrollArea for content that might overflow
+- Set minimum sizes: `setMinimumSize(700, 500)`
+
+**Threading for Long Operations:**
+```python
+# Use QThread for AI processing, translations, downloads
+class WorkerThread(QThread):
+    progress = pyqtSignal(str, int)
+    finished = pyqtSignal(object)
+    
+    def run(self):
+        # Long-running task
+        self.progress.emit("Status", percentage)
+        self.finished.emit(result)
+```
+
+### 3. Error Handling
+
+**ALWAYS** use try-except with specific error messages:
+```python
+try:
+    result = risky_operation()
+except FileNotFoundError as e:
+    logger.error(f"File not found: {e}")
+    QMessageBox.warning(self, "Error", f"File not found: {e}")
+except Exception as e:
+    logger.error(f"Unexpected error: {e}", exc_info=True)
+    QMessageBox.critical(self, "Error", f"An error occurred: {e}")
+```
+
+**User Feedback:**
+- Show progress for operations > 2 seconds
+- Use status labels with emoji indicators: ✓ ❌ 🔄 ⚠️
+- Log all errors to logger AND show user-friendly messages
+- Provide actionable error messages (tell user what to do)
+
+### 4. File Path Handling
+
+```python
+# ALWAYS use absolute paths
+video_path = os.path.abspath(video_path)
+
+# ALWAYS check file existence before operations
+if not os.path.exists(file_path):
+    raise FileNotFoundError(f"File not found: {file_path}")
+
+# Use pathlib for modern path handling
+from pathlib import Path
+subtitle_file = Path(video_file).with_suffix('.srt')
+```
+
+### 5. Configuration Management
+
+```python
+# Load/save patterns
+config_manager = ConfigManager()
+
+# ALWAYS validate loaded config
+style = config_manager.load_subtitle_style(video_path)
+if style is None:
+    style = SubtitleStyle()  # Use defaults
+
+# Save immediately after changes
+config_manager.save_subtitle_style(video_path, style)
+```
+
+---
+
+## Testing Guidelines
+
+### Manual Testing Checklist
+
+**Core Functionality:**
+- [ ] Load video (all formats: mp4, mkv, avi, mov, flv, wmv, webm)
+- [ ] Play/pause with spacebar
+- [ ] Seek with timeline click
+- [ ] Volume control
+- [ ] Fullscreen (ESC to exit, F to toggle)
+- [ ] Double-click fullscreen
+
+**Subtitle Features:**
+- [ ] Download from OpenSubtitles (by hash and by name)
+- [ ] Load local subtitle files (SRT, VTT, ASS)
+- [ ] Auto-load subtitles (same name as video)
+- [ ] Timing offset adjustment with live preview
+- [ ] Subtitle styling (font, color, position, stroke)
+- [ ] Translation to multiple languages (requires dependencies)
+- [ ] AI subtitle generation (requires GPU/CPU selection)
+
+**UI/UX:**
+- [ ] Responsive subtitle settings dialog (resize to test)
+- [ ] All keyboard shortcuts (ESC, F, Space, Ctrl+O, Ctrl+L, etc.)
+- [ ] Right-click context menu
+- [ ] Recent files list
+- [ ] Progress indicators for long operations
+
+### Automated Testing
+```bash
+# Run tests (when available)
+pytest tests/ -v
+
+# Check for Python errors
+python -m py_compile src/*.py
+
+# Check style (if using)
+pylint src/*.py
+flake8 src/
+```
+
+### Performance Testing
+- [ ] Video playback smooth at 1080p/4K
+- [ ] Subtitle rendering no lag
+- [ ] AI generation uses GPU when available
+- [ ] Translation completes in reasonable time
+- [ ] No memory leaks during long playback
+
+---
+
+## Debugging Guidelines
+
+### VS Code Debugger Setup
+```json
+// Use .vscode/launch.json configurations:
+// 1. "SubtitlePlayer" - Main application
+// 2. "SubtitlePlayer (with video)" - Opens specific video
+// 3. "SubtitlePlayer (verbose)" - Full VLC logging
+```
+
+**Debugging Tips:**
+- Set breakpoints in PyQt slots (signal handlers)
+- Watch `self.current_subtitles` and `self.subtitle_style`
+- Check VLC state: `self.media_player.get_state()`
+- Monitor video time: `self.media_player.get_time()`
+
+### Common Issues and Solutions
+
+**Issue: "Qt platform plugin error"**
+```bash
+# Install Qt dependencies
+sudo apt install python3-pyqt6 libqt6gui6
+```
+
+**Issue: "VLC library not found"**
+```bash
+# Install VLC development libraries
+sudo apt install vlc libvlc-dev
+pip install python-vlc==3.0.21203
+```
+
+**Issue: "Fullscreen crash"**
+- Check ESC key handler implemented
+- Verify menu bar remains visible
+- Test all exit methods (ESC, F, double-click)
+
+**Issue: "Translation not working"**
+```bash
+# Install optional translation dependencies
+pip install googletrans==4.0.0rc1
+# OR
+pip install deep-translator
+```
+
+**Issue: "AI generation fails"**
+```bash
+# Install AI dependencies
+sudo apt install ffmpeg
+pip install openai-whisper torch torchaudio
+```
+
+### Logging
+```python
+# Enable verbose logging
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
+# Check logs during debugging
+logger = logging.getLogger(__name__)
+logger.debug(f"Current state: {state}")
+```
+
+---
+
+## Code Style Guidelines
+
+### Python Style
+- **PEP 8** compliance
+- **Docstrings** for all classes and public methods
+- **Type hints** for function parameters and returns
+- **Descriptive variable names** (no single letters except i, j, k in loops)
+
+```python
+def parse_subtitle_file(self, file_path: str) -> List[SubtitleEntry]:
+    """
+    Parse subtitle file and return list of entries.
+    
+    Args:
+        file_path: Absolute path to subtitle file
+        
+    Returns:
+        List of SubtitleEntry objects
+        
+    Raises:
+        FileNotFoundError: If file doesn't exist
+        ValueError: If file format is invalid
+    """
+    pass
+```
+
+### PyQt6 Style
+```python
+# Signal/slot connections: Always use lambda for parameters
+button.clicked.connect(lambda: self.do_something(param))
+
+# Layouts: Clear hierarchy
+layout = QVBoxLayout()
+group = QGroupBox("Title")
+group_layout = QHBoxLayout()
+group.setLayout(group_layout)
+layout.addWidget(group)
+
+# Widget naming: descriptive with widget type
+self.font_family = QFontComboBox()
+self.font_size = QSpinBox()
+self.apply_btn = QPushButton("Apply")
+```
+
+### Naming Conventions
+- **Classes**: PascalCase (`SubtitleSettingsDialog`)
+- **Functions/methods**: snake_case (`load_subtitle_file`)
+- **Constants**: UPPER_SNAKE_CASE (`MAX_SUBTITLE_LENGTH`)
+- **Private methods**: `_internal_method()`
+- **Signals**: descriptive_past_tense (`subtitles_changed`)
+
+---
+
+## Adding New Features
+
+### Feature Development Workflow
+
+1. **Plan**: Document the feature in a new .md file
+2. **Design**: Sketch UI mockups, identify affected files
+3. **Implement**: Follow TDD if possible (test first)
+4. **Test**: Manual testing + automated tests
+5. **Document**: Update README, add feature documentation
+6. **Commit**: Clear, descriptive commit messages
+
+### Example: Adding a New Subtitle Format
+
+```python
+# 1. Add parser to subtitle_parser.py
+class NewFormatParser:
+    def parse(self, file_path: str) -> List[SubtitleEntry]:
+        # Implementation
+        pass
+
+# 2. Register in SubtitleParser factory
+def parse_file(self, file_path: str):
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext == '.newformat':
+        return NewFormatParser().parse(file_path)
+    # ...
+
+# 3. Update file filters in dialogs
+file_filters = "Subtitles (*.srt *.vtt *.ass *.newformat);;All Files (*)"
+
+# 4. Add tests
+def test_new_format_parser():
+    parser = NewFormatParser()
+    result = parser.parse("test.newformat")
+    assert len(result) > 0
+
+# 5. Update documentation
+# Add to README.md and FEATURES.md
+```
+
+### Adding a New Dialog
+
+```python
+# Template for new dialog
+class NewFeatureDialog(QDialog):
+    """Dialog for [feature description]"""
+    
+    # Define signals if needed
+    feature_completed = pyqtSignal(object)
+    
+    def __init__(self, parent=None, **kwargs):
+        super().__init__(parent)
+        self.init_ui()
+        self.apply_style()
+    
+    def init_ui(self):
+        """Initialize user interface"""
+        self.setWindowTitle("Feature Name")
+        self.setModal(True)
+        self.resize(800, 600)
+        
+        # Use responsive layout
+        layout = QGridLayout()
+        self.setLayout(layout)
+        
+        # Add widgets...
+    
+    def apply_style(self):
+        """Apply dark theme styling"""
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #1e1e1e;
+            }
+            /* ... */
+        """)
+```
+
+---
+
+## Common Patterns
+
+### Progress Tracking
+```python
+# Pattern for long operations
+self.status_label.setText("🔄 Processing...")
+self.button.setEnabled(False)
+
+try:
+    for i, item in enumerate(items):
+        # Process item
+        percentage = int((i / len(items)) * 100)
+        self.status_label.setText(f"Processing {i+1}/{len(items)} ({percentage}%)")
+        QApplication.processEvents()  # Keep UI responsive
+        
+    self.status_label.setText(f"✓ Completed {len(items)} items")
+except Exception as e:
+    self.status_label.setText(f"❌ Error: {str(e)}")
+finally:
+    self.button.setEnabled(True)
+```
+
+### Configuration Persistence
+```python
+# Save user preferences
+def save_settings(self):
+    config = {
+        'font_family': self.font_family.currentFont().family(),
+        'font_size': self.font_size.value(),
+        'text_color': self.text_color_btn.get_color(),
+        # ...
+    }
+    self.config_manager.save_config('feature_name', config)
+
+# Load user preferences
+def load_settings(self):
+    config = self.config_manager.load_config('feature_name')
+    if config:
+        self.font_family.setCurrentFont(QFont(config['font_family']))
+        self.font_size.setValue(config['font_size'])
+        # ...
+```
+
+### Resource Cleanup
+```python
+# ALWAYS cleanup resources
+def closeEvent(self, event):
+    """Handle dialog close event"""
+    # Stop threads
+    if hasattr(self, 'worker_thread') and self.worker_thread.isRunning():
+        self.worker_thread.quit()
+        self.worker_thread.wait()
+    
+    # Save state
+    self.save_settings()
+    
+    super().closeEvent(event)
+```
+
+---
+
+## Git Workflow
+
+### Commit Message Format
+```
+<type>: <short summary>
+
+<detailed description>
+
+<changes list>
+
+<optional footer>
+```
+
+**Types:**
+- `feat`: New feature
+- `fix`: Bug fix
+- `refactor`: Code refactoring
+- `docs`: Documentation update
+- `style`: Code style changes (formatting)
+- `test`: Test additions/updates
+- `chore`: Maintenance tasks
+
+**Example:**
+```
+feat: Add responsive layout to subtitle settings dialog
+
+Implemented grid-based responsive layout that adapts to window width:
+- 3 columns for wide windows (1200px+)
+- 2 columns for medium windows (900-1200px)
+- 1 column for narrow windows (<900px)
+
+Changes:
+- Updated subtitle_settings_dialog.py with QGridLayout
+- Added resizeEvent() handler for dynamic rearrangement
+- Reduced default height from 650px to 600px
+- Added QScrollArea for content overflow
+
+Closes #XX
+```
+
+### Branch Strategy
+```bash
+# Main development on main branch
+git checkout main
+
+# Feature branches for large changes
+git checkout -b feature/subtitle-effects
+# ... develop ...
+git commit -m "feat: Add subtitle fade effects"
+git push origin feature/subtitle-effects
+# Create PR to merge
+
+# Hotfix for critical bugs
+git checkout -b hotfix/fullscreen-crash
+# ... fix ...
+git commit -m "fix: Critical fullscreen crash requiring restart"
+git push origin hotfix/fullscreen-crash
+# Merge immediately
+```
+
+### Pre-commit Checklist
+- [ ] Code runs without errors
+- [ ] All features tested manually
+- [ ] No debugging print() statements left
+- [ ] Documentation updated
+- [ ] Commit message is clear and descriptive
+- [ ] No sensitive data (API keys, passwords)
+
+---
+
+## Performance Optimization
+
+### Video Playback
+```python
+# Use hardware acceleration when available
+vlc_instance = vlc.Instance('--avcodec-hw=any')
+
+# Buffer size for smooth playback
+media.parse_with_options(vlc.MediaParseFlag.network, 0)
+```
+
+### Subtitle Rendering
+```python
+# Cache rendered subtitles
+self._subtitle_cache = {}
+
+def render_subtitle(self, text):
+    if text in self._subtitle_cache:
+        return self._subtitle_cache[text]
+    
+    rendered = self._render(text)
+    self._subtitle_cache[text] = rendered
+    return rendered
+```
+
+### Translation Optimization
+```python
+# Batch translate for efficiency
+texts = [sub.text for sub in subtitles]
+translated_texts = translator.batch_translate(texts, target_lang)
+
+# Cache translations
+translation_cache = {}
+if text in translation_cache:
+    return translation_cache[text]
+```
+
+---
+
+## Security Considerations
+
+### API Keys
+```python
+# NEVER hardcode API keys
+# Use environment variables or config files (add to .gitignore)
+api_key = os.getenv('OPENSUBTITLES_API_KEY')
+if not api_key:
+    raise ValueError("API key not found in environment")
+```
+
+### File Operations
+```python
+# Validate file paths to prevent directory traversal
+def is_safe_path(path):
+    abs_path = os.path.abspath(path)
+    return abs_path.startswith(allowed_directory)
+
+# Sanitize user input
+filename = os.path.basename(user_input)  # Remove directory components
+```
+
+### External Commands
+```python
+# Use subprocess with list (prevents shell injection)
+subprocess.run(['ffmpeg', '-i', input_file, output_file], check=True)
+# NOT: subprocess.run(f'ffmpeg -i {input_file} {output_file}', shell=True)
+```
+
+---
+
+## Documentation Standards
+
+### Code Documentation
+```python
+"""
+Module: subtitle_translator.py
+Purpose: Multi-language subtitle translation using AI APIs
+
+Classes:
+    SubtitleTranslator: Main translation class with dual backend support
+    
+Functions:
+    translate_subtitles(): Batch translate subtitle entries
+    
+Dependencies:
+    - googletrans (optional)
+    - deep-translator (optional)
+    
+Usage:
+    translator = SubtitleTranslator()
+    translated = translator.translate_subtitles(subtitles, "English (US)")
+"""
+```
+
+### User Documentation
+- **README.md**: Overview, installation, basic usage
+- **FEATURES.md**: Detailed feature descriptions with examples
+- **[FEATURE]_GUIDE.md**: Step-by-step guides for specific features
+- **TROUBLESHOOTING.md**: Common issues and solutions
+- **CHANGELOG.md**: Version history with changes
+
+---
+
+## AI Assistant Interaction Guidelines
+
+### When Assisting with Code
+
+1. **Always ask clarifying questions** before major changes
+2. **Show code context** (3-5 lines before/after changes)
+3. **Explain the reasoning** behind suggestions
+4. **Provide alternatives** when multiple approaches exist
+5. **Test suggestions** mentally before recommending
+
+### When Debugging
+
+1. **Gather context first**: Read related files, check error logs
+2. **Reproduce the issue**: Understand the exact steps
+3. **Identify root cause**: Don't just fix symptoms
+4. **Test the fix**: Verify it doesn't break other features
+5. **Document the solution**: Add comments, update docs
+
+### When Adding Features
+
+1. **Understand requirements**: What problem does this solve?
+2. **Check existing code**: Reuse patterns, maintain consistency
+3. **Plan the implementation**: Which files to modify, new files needed
+4. **Consider edge cases**: Error handling, validation, limits
+5. **Update documentation**: README, feature guides, code comments
+
+### Communication Style
+
+- **Be concise but complete**: Explain what, why, and how
+- **Use code examples**: Show, don't just tell
+- **Highlight important warnings**: Security, performance, breaking changes
+- **Offer learning resources**: Links to PyQt6 docs, Python guides
+- **Be encouraging**: Positive feedback on good practices
+
+---
+
+## Quick Reference
+
+### Common Commands
+```bash
+# Activate venv
+source /home/cmedeiros/Documents/Cassiano-Portfolio/.venv/bin/activate
+
+# Run application
+python launch.py
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Install translation (optional)
+./install-translation.sh
+
+# Run tests
+pytest tests/ -v
+
+# Git operations
+git status
+git add -A
+git commit -m "feat: description"
+git push origin main
+```
+
+### Important File Locations
+- **Config**: `~/.subtitleplayer/config.json`
+- **Logs**: Console output (no file logging by default)
+- **Virtual env**: `/home/cmedeiros/Documents/Cassiano-Portfolio/.venv`
+- **Project root**: `/home/cmedeiros/Documents/Cassiano-Portfolio/Subtitler-App/SubtitlePlayer`
+
+### Keyboard Shortcuts (User)
+- `Ctrl+O`: Open video
+- `Ctrl+L`: Load subtitle file
+- `Ctrl+D`: Download subtitles
+- `Ctrl+S`: Subtitle settings
+- `Ctrl+G`: Generate AI subtitles
+- `Space`: Play/pause
+- `F` or `F11`: Toggle fullscreen
+- `ESC`: Exit fullscreen
+- `Double-click`: Toggle fullscreen
+- `Right-click`: Context menu
+
+---
+
+## Troubleshooting Development Issues
+
+### "Import errors in IDE"
+- Verify Python interpreter points to venv
+- Check `.vscode/settings.json` has correct path
+- Restart IDE after changing interpreter
+
+### "Debugger doesn't stop at breakpoints"
+- Ensure using launch.py (not shell scripts)
+- Check launch.json configuration
+- Verify debugger attached to correct process
+
+### "UI doesn't update"
+- Call `QApplication.processEvents()` in loops
+- Use signals/slots instead of direct calls
+- Check if running in main thread
+
+### "Changes not reflected"
+- Restart application (Python caches imports)
+- Check if editing correct file (watch for duplicates)
+- Clear `__pycache__` directories
+
+---
+
+## Future Roadmap Ideas
+
+**Short-term enhancements:**
+- [ ] Save translated subtitles to file
+- [ ] Subtitle preview during timeline hover
+- [ ] Playlist support
+- [ ] Subtitle effects (fade in/out)
+- [ ] Custom keyboard shortcuts
+
+**Medium-term features:**
+- [ ] Offline translation (local models)
+- [ ] Subtitle editor (create/edit subtitles)
+- [ ] Multi-track subtitle support
+- [ ] Audio track selection
+- [ ] Chapter markers
+
+**Long-term vision:**
+- [ ] Ubuntu Snap package
+- [ ] Flatpak distribution
+- [ ] Multi-platform support (Windows, macOS)
+- [ ] Cloud sync of preferences
+- [ ] Community subtitle sharing
+
+---
+
+## Remember
+
+- **User experience first**: Make it intuitive and responsive
+- **Fail gracefully**: Handle errors, don't crash
+- **Performance matters**: Keep UI responsive, optimize where needed
+- **Document everything**: Future you (and others) will thank you
+- **Test thoroughly**: Especially fullscreen, VLC integration, file operations
+- **Stay consistent**: Follow existing patterns and conventions
+- **Ask for help**: Check PyQt6 docs, VLC docs, Stack Overflow
+
+**Most importantly**: Have fun building an awesome video player! 🎬🚀

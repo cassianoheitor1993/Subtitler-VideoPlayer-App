@@ -711,7 +711,12 @@ class VideoPlayer(QMainWindow):
         # Import here to avoid circular dependency
         from subtitle_settings_dialog import SubtitleSettingsDialog
         
-        dialog = SubtitleSettingsDialog(self.subtitle_style, self)
+        dialog = SubtitleSettingsDialog(
+            self.subtitle_style, 
+            self,
+            subtitles=self.current_subtitles,
+            current_time_func=lambda: self.media_player.get_time() / 1000.0
+        )
         if dialog.exec():
             self.subtitle_style = dialog.get_style()
             self.subtitle_overlay.set_style(self.subtitle_style)

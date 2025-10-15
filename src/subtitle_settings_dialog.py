@@ -6,10 +6,11 @@ Configure subtitle appearance and timing
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QSpinBox, QDoubleSpinBox, QComboBox, QGroupBox, QCheckBox,
-    QColorDialog, QFontComboBox
+    QColorDialog, QFontComboBox, QGridLayout, QScrollArea, QWidget,
+    QSizePolicy
 )
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QColor, QFont
+from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtGui import QColor, QFont, QResizeEvent
 
 from config_manager import SubtitleStyle
 
@@ -54,9 +55,11 @@ class ColorButton(QPushButton):
 class SubtitleSettingsDialog(QDialog):
     """Dialog for configuring subtitle appearance"""
     
-    def __init__(self, current_style: SubtitleStyle, parent=None):
+    def __init__(self, current_style: SubtitleStyle, parent=None, subtitles=None, current_time_func=None):
         super().__init__(parent)
         self.current_style = current_style
+        self.subtitles = subtitles or []
+        self.current_time_func = current_time_func
         self.init_ui()
         self.load_settings()
     
@@ -64,10 +67,27 @@ class SubtitleSettingsDialog(QDialog):
         """Initialize user interface"""
         self.setWindowTitle("Subtitle Settings")
         self.setModal(True)
-        self.resize(600, 650)
+        self.resize(900, 600)  # Wider default, less tall
+        self.setMinimumSize(700, 500)
         
-        layout = QVBoxLayout()
-        self.setLayout(layout)
+        # Main layout
+        main_layout = QVBoxLayout()
+        self.setLayout(main_layout)
+        
+        # Scroll area for content
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        
+        # Content widget
+        content_widget = QWidget()
+        self.content_layout = QGridLayout()
+        self.content_layout.setSpacing(10)
+        content_widget.setLayout(self.content_layout)
+        scroll.setWidget(content_widget)
+        
+        main_layout.addWidget(scroll)
         
         # Font settings
         font_group = QGroupBox("Font")
@@ -102,7 +122,6 @@ class SubtitleSettingsDialog(QDialog):
         font_layout.addLayout(style_layout)
         
         font_group.setLayout(font_layout)
-        layout.addWidget(font_group)
         
         # Color settings
         color_group = QGroupBox("Colors")
@@ -150,7 +169,6 @@ class SubtitleSettingsDialog(QDialog):
         color_layout.addLayout(bg_color_layout)
         
         color_group.setLayout(color_layout)
-        layout.addWidget(color_group)
         
         # Position settings
         position_group = QGroupBox("Position")
@@ -199,10 +217,9 @@ class SubtitleSettingsDialog(QDialog):
         position_layout.addLayout(h_margin_layout)
         
         position_group.setLayout(position_layout)
-        layout.addWidget(position_group)
         
         # Timing settings
-        timing_group = QGroupBox("Timing")
+        timing_group = QGroupBox("Timing Synchronization")
         timing_layout = QVBoxLayout()
         
         timing_info = QLabel("Adjust subtitle timing if out of sync with video")
@@ -216,13 +233,76 @@ class SubtitleSettingsDialog(QDialog):
         self.timing_offset.setSingleStep(0.1)
         self.timing_offset.setSuffix(" sec")
         self.timing_offset.setDecimals(1)
+        self.timing_offset.valueChanged.connect(self.update_timing_preview)
         offset_layout.addWidget(offset_label)
         offset_layout.addWidget(self.timing_offset)
         offset_layout.addStretch()
         timing_layout.addLayout(offset_layout)
         
+        # Timing preview
+        self.timing_preview_label = QLabel("Current subtitle at this time:")
+        timing_layout.addWidget(self.timing_preview_label)
+        
+        self.timing_preview_text = QLabel("Play video to see subtitle preview")
+        self.timing_preview_text.setWordWrap(True)
+        self.timing_preview_text.setStyleSheet("""
+            QLabel {
+                background-color: #3d3d3d;
+                border: 1px solid #4d4d4d;
+                border-radius: 4px;
+                padding: 10px;
+                min-height: 40px;
+            }
+        """)
+        timing_layout.addWidget(self.timing_preview_text)
+        
         timing_group.setLayout(timing_layout)
-        layout.addWidget(timing_group)
+        
+        # Translation feature
+        translation_group = QGroupBox("Subtitle Translation")
+        translation_layout = QVBoxLayout()
+        
+        trans_info = QLabel("Translate subtitles to another language using AI")
+        trans_info.setWordWrap(True)
+        translation_layout.addWidget(trans_info)
+        
+        trans_select_layout = QHBoxLayout()
+        trans_label = QLabel("Target Language:")
+        self.translation_combo = QComboBox()
+        self.translation_combo.addItems([
+            "No Translation",
+            "English (US)",
+            "English (UK)", 
+            "English (Canada)",
+            "Portuguese (Brazil)",
+            "Portuguese (Portugal)",
+            "Spanish (Spain)",
+            "Spanish (Latin America)",
+            "Chinese (Simplified)",
+            "Chinese (Traditional)",
+            "French",
+            "German",
+            "Italian",
+            "Japanese",
+            "Korean",
+            "Russian",
+            "Arabic",
+            "Hindi"
+        ])
+        trans_select_layout.addWidget(trans_label)
+        trans_select_layout.addWidget(self.translation_combo)
+        trans_select_layout.addStretch()
+        translation_layout.addLayout(trans_select_layout)
+        
+        self.translate_btn = QPushButton("🌐 Translate Subtitles")
+        self.translate_btn.clicked.connect(self.translate_subtitles)
+        translation_layout.addWidget(self.translate_btn)
+        
+        self.translation_status = QLabel("")
+        self.translation_status.setWordWrap(True)
+        translation_layout.addWidget(self.translation_status)
+        
+        translation_group.setLayout(translation_layout)
         
         # Preview
         preview_group = QGroupBox("Preview")
@@ -241,7 +321,25 @@ class SubtitleSettingsDialog(QDialog):
         preview_layout.addWidget(self.preview_label)
         
         preview_group.setLayout(preview_layout)
-        layout.addWidget(preview_group)
+        
+        # Store references to group widgets for responsive layout
+        self._group_widgets = {
+            'font': font_group,
+            'color': color_group,
+            'position': position_group,
+            'timing': timing_group,
+            'translation': translation_group,
+            'preview': preview_group
+        }
+        
+        # Add groups to grid layout - responsive arrangement
+        # Initially in 2 columns, will rearrange on resize
+        self.content_layout.addWidget(font_group, 0, 0)
+        self.content_layout.addWidget(color_group, 0, 1)
+        self.content_layout.addWidget(position_group, 1, 0)
+        self.content_layout.addWidget(timing_group, 1, 1)
+        self.content_layout.addWidget(translation_group, 2, 0)
+        self.content_layout.addWidget(preview_group, 2, 1)
         
         # Buttons
         button_layout = QHBoxLayout()
@@ -260,7 +358,7 @@ class SubtitleSettingsDialog(QDialog):
         self.apply_btn.clicked.connect(self.accept)
         button_layout.addWidget(self.apply_btn)
         
-        layout.addLayout(button_layout)
+        main_layout.addLayout(button_layout)
         
         # Connect signals for live preview
         self.font_family.currentFontChanged.connect(self.update_preview)
@@ -388,3 +486,142 @@ class SubtitleSettingsDialog(QDialog):
                 padding: 10px;
             }}
         """)
+    
+    def update_timing_preview(self):
+        """Update timing preview to show which subtitle is at current time"""
+        if not self.subtitles or not self.current_time_func:
+            self.timing_preview_text.setText("Play video to see subtitle preview")
+            return
+        
+        # Get current time and apply offset
+        current_time = self.current_time_func() + self.timing_offset.value()
+        
+        # Find subtitle at this time
+        for subtitle in self.subtitles:
+            if subtitle.start_time <= current_time <= subtitle.end_time:
+                time_str = self._format_time(current_time)
+                self.timing_preview_text.setText(f"[{time_str}] {subtitle.text}")
+                self.timing_preview_label.setText(f"✓ Subtitle at {time_str}:")
+                return
+        
+        # No subtitle at this time
+        time_str = self._format_time(current_time)
+        self.timing_preview_text.setText(f"[{time_str}] (no subtitle)")
+        self.timing_preview_label.setText(f"Time {time_str}:")
+    
+    def _format_time(self, seconds):
+        """Format seconds to MM:SS"""
+        mins = int(seconds // 60)
+        secs = int(seconds % 60)
+        return f"{mins:02d}:{secs:02d}"
+    
+    def translate_subtitles(self):
+        """Translate subtitles to selected language"""
+        if not self.subtitles:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(
+                self,
+                "No Subtitles",
+                "No subtitles loaded to translate."
+            )
+            return
+        
+        target_lang = self.translation_combo.currentText()
+        if target_lang == "No Translation":
+            self.translation_status.setText("Please select a target language")
+            return
+        
+        # Check if translation module is available
+        try:
+            from subtitle_translator import SubtitleTranslator
+        except ImportError:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.information(
+                self,
+                "Translation Feature",
+                "Subtitle translation requires additional dependencies:\n\n"
+                "pip install googletrans==4.0.0rc1\n"
+                "# OR\n"
+                "pip install deep-translator\n\n"
+                "After installation, restart SubtitlePlayer."
+            )
+            return
+        
+        # Show translation dialog
+        self.translation_status.setText(f"🔄 Translating to {target_lang}...")
+        self.translate_btn.setEnabled(False)
+        
+        try:
+            translator = SubtitleTranslator()
+            translated_subs = translator.translate_subtitles(
+                self.subtitles,
+                target_lang,
+                lambda msg, pct: self.translation_status.setText(f"{msg} ({pct}%)")
+            )
+            
+            if translated_subs:
+                self.subtitles = translated_subs
+                self.translation_status.setText(f"✓ Translated {len(translated_subs)} subtitles to {target_lang}")
+                # Signal that subtitles have changed
+                if hasattr(self, 'subtitles_changed'):
+                    self.subtitles_changed.emit(translated_subs)
+            else:
+                self.translation_status.setText("❌ Translation failed")
+                
+        except Exception as e:
+            self.translation_status.setText(f"❌ Error: {str(e)}")
+        finally:
+            self.translate_btn.setEnabled(True)
+    
+    def resizeEvent(self, event: QResizeEvent):
+        """Handle window resize to rearrange grid layout responsively"""
+        super().resizeEvent(event)
+        self.rearrange_layout()
+    
+    def rearrange_layout(self):
+        """Rearrange grid layout based on available width"""
+        width = self.width()
+        
+        # Store all group widgets
+        if not hasattr(self, '_group_widgets'):
+            return
+        
+        font_group = self._group_widgets.get('font')
+        color_group = self._group_widgets.get('color')
+        position_group = self._group_widgets.get('position')
+        timing_group = self._group_widgets.get('timing')
+        translation_group = self._group_widgets.get('translation')
+        preview_group = self._group_widgets.get('preview')
+        
+        if not all([font_group, color_group, position_group, timing_group, translation_group, preview_group]):
+            return
+        
+        # Remove all widgets from grid
+        for i in reversed(range(self.content_layout.count())):
+            self.content_layout.itemAt(i).widget().setParent(None)
+        
+        # Determine number of columns based on width
+        if width >= 1200:
+            # Wide layout: 3 columns
+            self.content_layout.addWidget(font_group, 0, 0)
+            self.content_layout.addWidget(color_group, 0, 1)
+            self.content_layout.addWidget(position_group, 0, 2)
+            self.content_layout.addWidget(timing_group, 1, 0)
+            self.content_layout.addWidget(translation_group, 1, 1)
+            self.content_layout.addWidget(preview_group, 1, 2)
+        elif width >= 900:
+            # Medium layout: 2 columns
+            self.content_layout.addWidget(font_group, 0, 0)
+            self.content_layout.addWidget(color_group, 0, 1)
+            self.content_layout.addWidget(position_group, 1, 0)
+            self.content_layout.addWidget(timing_group, 1, 1)
+            self.content_layout.addWidget(translation_group, 2, 0)
+            self.content_layout.addWidget(preview_group, 2, 1)
+        else:
+            # Narrow layout: 1 column
+            self.content_layout.addWidget(font_group, 0, 0)
+            self.content_layout.addWidget(color_group, 1, 0)
+            self.content_layout.addWidget(position_group, 2, 0)
+            self.content_layout.addWidget(timing_group, 3, 0)
+            self.content_layout.addWidget(translation_group, 4, 0)
+            self.content_layout.addWidget(preview_group, 5, 0)

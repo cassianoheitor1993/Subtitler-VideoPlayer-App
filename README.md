@@ -15,11 +15,16 @@ A professional video player for Linux with native subtitle download support thro
   - Background color and transparency
   - Position (top/center/bottom, left/center/right)
   - Timing offset adjustment
+- 🎯 **Live Timing Preview**: See exactly which subtitle appears at your adjusted timing offset in real-time
+- 🌍 **Multi-language Translation**: Translate subtitles to 18+ languages including English, Portuguese, Spanish, Chinese, French, German, and more
+- 🤖 **AI Subtitle Generation**: Generate subtitles using Whisper AI for videos without subtitles (99+ languages)
 - 💾 **Smart Metadata Management**: Saves subtitle preferences per video
 - 🌙 **Modern Dark Theme**: Professional, eye-friendly interface
-- ⌨️ **Keyboard Shortcuts**: Quick access to common functions
+- ⌨️ **Keyboard Shortcuts**: Quick access to common functions (ESC, F, Space, etc.)
 - 📂 **Recent Files**: Easy access to previously played videos
 - 🎯 **Auto-load Subtitles**: Automatically finds and loads subtitle files
+- 🖱️ **Interactive Timeline**: Click to seek, double-click for fullscreen
+- 📱 **Right-click Context Menu**: Quick access to common actions
 
 ## Screenshots
 
