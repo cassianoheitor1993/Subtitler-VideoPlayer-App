@@ -185,17 +185,27 @@ class SubtitleTranslator:
         
         try:
             if self.backend == "googletrans":
-                # Using googletrans
-                result = self.translator.translate(clean_text, dest=target_lang)
-                
-                # Check if result is valid
-                if result is None or not hasattr(result, 'text'):
-                    logger.warning(f"Invalid translation result for '{text[:30]}...', keeping original")
+                # Using googletrans - wrap in extra error handling due to library bugs
+                try:
+                    result = self.translator.translate(clean_text, dest=target_lang)
+                    
+                    # Check if result is valid
+                    if result is None or not hasattr(result, 'text'):
+                        logger.debug(f"Invalid translation result for '{text[:30]}...', keeping original")
+                        return text
+                    
+                    # Return translated text or original if empty
+                    translated = result.text
+                    return translated if translated else text
+                    
+                except AttributeError as ae:
+                    # Known googletrans bug: 'Translator' object has no attribute 'raise_Exception'
+                    # This happens when the API returns unexpected results
+                    if 'raise_Exception' in str(ae):
+                        logger.debug(f"googletrans API issue for '{text[:20]}...', keeping original")
+                    else:
+                        logger.debug(f"Translation attribute error: {ae}, keeping original")
                     return text
-                
-                # Return translated text or original if empty
-                translated = result.text
-                return translated if translated else text
                 
             elif self.backend == "deep-translator":
                 # Using deep-translator
@@ -208,11 +218,12 @@ class SubtitleTranslator:
                 return text
                 
         except AttributeError as e:
-            # Handle NoneType or missing attributes
-            logger.warning(f"Translation attribute error for '{text[:30]}...': {e}, keeping original")
+            # Handle other NoneType or missing attributes
+            logger.debug(f"Translation attribute error for '{text[:30]}...': {e}, keeping original")
             return text
         except Exception as e:
-            logger.error(f"Translation error for text '{text[:50]}...': {e}")
+            # Catch-all for other errors
+            logger.debug(f"Translation error for '{text[:30]}...': {e}, keeping original")
             return text
     
     def batch_translate(
