@@ -1,0 +1,20 @@
+# Core Dependencies (Required)
+PyQt6>=6.6.0
+PyQt6-Qt6>=6.6.0
+python-vlc>=3.0.18121
+requests>=2.31.0
+chardet>=5.2.0
+pysrt>=1.1.2
+
+# AI Subtitle Generation (Optional)
+# Uncomment to enable AI-powered subtitle generation:
+# openai-whisper>=20231117
+# torch>=2.0.0
+# torchaudio>=2.0.0
+# torchvision>=0.15.0
+
+# For CPU-only (lighter):
+# Install with: pip install openai-whisper torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+# For GPU (NVIDIA):
+# Install with: pip install openai-whisper torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
