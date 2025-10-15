@@ -5,6 +5,7 @@ Handles subtitle translation to multiple languages using translation APIs
 """
 
 import logging
+import time
 from typing import List, Callable, Optional
 from dataclasses import dataclass
 
@@ -113,6 +114,10 @@ class SubtitleTranslator:
                 # Translate the text
                 translated_text = self._translate_text(subtitle.text, lang_code)
                 
+                # Check if translation actually happened (not just returned original)
+                if translated_text == subtitle.text and len(subtitle.text) > 1:
+                    logger.debug(f"Subtitle {i+1} unchanged, possibly untranslatable or already in target language")
+                
                 # Create translated subtitle object
                 # Preserve original timing and structure
                 translated_sub = type(subtitle)(
@@ -128,6 +133,10 @@ class SubtitleTranslator:
                 
                 translated.append(translated_sub)
                 
+                # Small delay to avoid rate limiting (every 50 subtitles)
+                if (i + 1) % 50 == 0 and i < total - 1:
+                    time.sleep(0.5)
+                
             except Exception as e:
                 logger.error(f"Error translating subtitle {i+1}: {e}")
                 # Keep original subtitle on error
@@ -139,6 +148,23 @@ class SubtitleTranslator:
         
         logger.info(f"Successfully translated {len(translated)} subtitles")
         return translated
+    
+    def _sanitize_text(self, text: str) -> str:
+        """
+        Sanitize text for translation (remove or handle problematic characters)
+        
+        Args:
+            text: Original text
+            
+        Returns:
+            Sanitized text safe for translation
+        """
+        if not text:
+            return text
+        
+        # Keep the original text, just strip extra whitespace
+        # Most translation APIs can handle special characters
+        return text.strip()
     
     def _translate_text(self, text: str, target_lang: str) -> str:
         """
@@ -154,21 +180,37 @@ class SubtitleTranslator:
         if not text or not text.strip():
             return text
         
+        # Sanitize text before translation
+        clean_text = self._sanitize_text(text)
+        
         try:
             if self.backend == "googletrans":
                 # Using googletrans
-                result = self.translator.translate(text, dest=target_lang)
-                return result.text
+                result = self.translator.translate(clean_text, dest=target_lang)
+                
+                # Check if result is valid
+                if result is None or not hasattr(result, 'text'):
+                    logger.warning(f"Invalid translation result for '{text[:30]}...', keeping original")
+                    return text
+                
+                # Return translated text or original if empty
+                translated = result.text
+                return translated if translated else text
                 
             elif self.backend == "deep-translator":
                 # Using deep-translator
                 translator = self.translator(source='auto', target=target_lang)
-                return translator.translate(text)
+                translated = translator.translate(clean_text)
+                return translated if translated else text
                 
             else:
                 logger.error("No translation backend available")
                 return text
                 
+        except AttributeError as e:
+            # Handle NoneType or missing attributes
+            logger.warning(f"Translation attribute error for '{text[:30]}...': {e}, keeping original")
+            return text
         except Exception as e:
             logger.error(f"Translation error for text '{text[:50]}...': {e}")
             return text
