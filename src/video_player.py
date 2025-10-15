@@ -125,10 +125,9 @@ class VideoPlayer(QMainWindow):
             '--no-xlib',
             '--quiet',
             '--no-video-title-show',
-            '--no-audio-display',
             '--avcodec-hw=none',  # Disable hardware acceleration to avoid errors
         ]
-        self.instance = vlc.Instance(' '.join(vlc_args))
+        self.instance = vlc.Instance(vlc_args)
         self.media_player = self.instance.media_player_new()
         
         # Timer for updating UI
