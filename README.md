@@ -17,6 +17,8 @@ A professional video player for Linux with native subtitle download support thro
   - Timing offset adjustment
 - 🎯 **Live Timing Preview**: See exactly which subtitle appears at your adjusted timing offset in real-time
 - 🌍 **Multi-language Translation**: Translate subtitles to 18+ languages including English, Portuguese, Spanish, Chinese, French, German, and more
+  - 📊 **Visual Progress Bar**: Real-time translation progress with percentage completion
+  - 💾 **File-based Translation**: Saves translated subtitles as new files (e.g., movie.pt-BR.srt)
 - 🤖 **AI Subtitle Generation**: Generate subtitles using Whisper AI for videos without subtitles (99+ languages)
 - 💾 **Smart Metadata Management**: Saves subtitle preferences per video
 - 🌙 **Modern Dark Theme**: Professional, eye-friendly interface
