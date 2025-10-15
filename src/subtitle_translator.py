@@ -80,7 +80,8 @@ class SubtitleTranslator:
         self,
         subtitles: List,
         target_language: str,
-        progress_callback: Optional[Callable[[str, int], None]] = None
+        progress_callback: Optional[Callable[[str, int], None]] = None,
+        cancel_check: Optional[Callable[[], bool]] = None
     ) -> List:
         """
         Translate a list of subtitles to the target language
@@ -89,9 +90,10 @@ class SubtitleTranslator:
             subtitles: List of subtitle objects with text, start_time, end_time
             target_language: Target language name (e.g., "English (US)")
             progress_callback: Optional callback function(message, percentage)
+            cancel_check: Optional callback function to check if translation should be cancelled
             
         Returns:
-            List of translated subtitle objects
+            List of translated subtitle objects (or partial list if cancelled)
         """
         if not subtitles:
             return []
@@ -105,6 +107,13 @@ class SubtitleTranslator:
         logger.info(f"Starting translation of {total} subtitles to {target_language} ({lang_code})")
         
         for i, subtitle in enumerate(subtitles):
+            # Check if translation should be cancelled
+            if cancel_check and cancel_check():
+                logger.info(f"Translation cancelled by user at subtitle {i+1}/{total}")
+                if progress_callback:
+                    progress_callback(f"Translation cancelled", int((i / total) * 100))
+                return translated  # Return partial results
+            
             try:
                 # Report progress
                 if progress_callback and i % 10 == 0:

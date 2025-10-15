@@ -62,6 +62,7 @@ class SubtitleSettingsDialog(QDialog):
         self.current_time_func = current_time_func
         self.video_path = video_path
         self.subtitle_path = subtitle_path
+        self.translation_cancelled = False  # Flag to track translation cancellation
         self.init_ui()
         self.load_settings()
     
@@ -296,9 +297,30 @@ class SubtitleSettingsDialog(QDialog):
         trans_select_layout.addStretch()
         translation_layout.addLayout(trans_select_layout)
         
+        # Translation buttons layout
+        trans_buttons_layout = QHBoxLayout()
+        
         self.translate_btn = QPushButton("🌐 Translate Subtitles")
         self.translate_btn.clicked.connect(self.translate_subtitles)
-        translation_layout.addWidget(self.translate_btn)
+        trans_buttons_layout.addWidget(self.translate_btn)
+        
+        self.cancel_translation_btn = QPushButton("❌ Cancel")
+        self.cancel_translation_btn.clicked.connect(self.cancel_translation)
+        self.cancel_translation_btn.setVisible(False)
+        self.cancel_translation_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #d32f2f;
+                color: white;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #b71c1c;
+            }
+        """)
+        trans_buttons_layout.addWidget(self.cancel_translation_btn)
+        
+        trans_buttons_layout.addStretch()
+        translation_layout.addLayout(trans_buttons_layout)
         
         # Progress bar for translation
         self.translation_progress = QProgressBar()
@@ -537,6 +559,12 @@ class SubtitleSettingsDialog(QDialog):
         secs = int(seconds % 60)
         return f"{mins:02d}:{secs:02d}"
     
+    def cancel_translation(self):
+        """Cancel ongoing translation"""
+        self.translation_cancelled = True
+        self.translation_status.setText("⚠️ Cancelling translation...")
+        self.cancel_translation_btn.setEnabled(False)
+    
     def translate_subtitles(self):
         """Translate subtitles to selected language and save to new file"""
         import os
@@ -619,11 +647,14 @@ class SubtitleSettingsDialog(QDialog):
                 self.translation_status.setText("Translation cancelled")
                 return
         
-        # Show translation progress
+        # Reset cancellation flag and show UI
+        self.translation_cancelled = False
         self.translation_status.setText(f"🔄 Translating to {target_lang}...")
         self.translation_progress.setValue(0)
         self.translation_progress.setVisible(True)
         self.translate_btn.setEnabled(False)
+        self.cancel_translation_btn.setVisible(True)
+        self.cancel_translation_btn.setEnabled(True)
         
         # Progress callback to update both status and progress bar
         def update_progress(msg, pct):
@@ -633,18 +664,46 @@ class SubtitleSettingsDialog(QDialog):
             from PyQt6.QtWidgets import QApplication
             QApplication.processEvents()
         
+        # Cancel check callback
+        def check_cancelled():
+            return self.translation_cancelled
+        
         try:
             translator = SubtitleTranslator()
             translated_subs = translator.translate_subtitles(
                 self.subtitles,
                 target_lang,
-                update_progress
+                update_progress,
+                check_cancelled
             )
+            
+            # Check if translation was cancelled
+            if self.translation_cancelled:
+                self.translation_status.setText(f"❌ Translation cancelled ({len(translated_subs)}/{len(self.subtitles)} completed)")
+                self.translation_progress.setVisible(False)
+                self.translate_btn.setEnabled(True)
+                self.cancel_translation_btn.setVisible(False)
+                
+                # Ask if user wants to save partial results
+                if translated_subs:
+                    reply = QMessageBox.question(
+                        self,
+                        "Save Partial Translation?",
+                        f"Translation was cancelled.\n\n"
+                        f"Translated {len(translated_subs)} out of {len(self.subtitles)} subtitles.\n\n"
+                        "Would you like to save the partial translation?",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                    )
+                    if reply != QMessageBox.StandardButton.Yes:
+                        return
+                else:
+                    return
             
             if not translated_subs:
                 self.translation_status.setText("❌ Translation failed")
                 self.translation_progress.setVisible(False)
                 self.translate_btn.setEnabled(True)
+                self.cancel_translation_btn.setVisible(False)
                 return
             
             # Save translated subtitles to file
@@ -673,9 +732,10 @@ class SubtitleSettingsDialog(QDialog):
                 f"✓ Saved: {os.path.basename(output_path)}"
             )
             
-            # Hide progress bar after a short delay
+            # Hide progress bar and cancel button after a short delay
             from PyQt6.QtCore import QTimer
             QTimer.singleShot(1000, lambda: self.translation_progress.setVisible(False))
+            self.cancel_translation_btn.setVisible(False)
             
             reply = QMessageBox.question(
                 self,
@@ -706,6 +766,7 @@ class SubtitleSettingsDialog(QDialog):
             print(f"Translation error details:\n{error_details}")
         finally:
             self.translate_btn.setEnabled(True)
+            self.cancel_translation_btn.setVisible(False)
     
     def resizeEvent(self, event: QResizeEvent):
         """Handle window resize to rearrange grid layout responsively"""
