@@ -470,15 +470,38 @@ class VideoPlayer(QMainWindow):
         # Try to auto-load subtitle
         subtitle_file = self.config_manager.get_subtitle_file_for_video(file_path)
         if subtitle_file and os.path.exists(subtitle_file):
+            print(f"Loading previously associated subtitle: {os.path.basename(subtitle_file)}")
             self.load_subtitle(subtitle_file)
         else:
-            # Check for subtitle file in same directory
+            # Check for subtitle file in same directory with multiple patterns
             video_path = Path(file_path)
+            video_name = video_path.stem
+            video_dir = video_path.parent
+            
+            # Search patterns (in order of preference)
+            patterns = [
+                # Exact name match (most common)
+                lambda ext: video_path.with_suffix(ext),
+                # Language codes (e.g., movie.en.srt, movie.pt-BR.srt)
+                lambda ext: video_dir / f"{video_name}.en{ext}",
+                lambda ext: video_dir / f"{video_name}.pt-BR{ext}",
+                lambda ext: video_dir / f"{video_name}.pt{ext}",
+                lambda ext: video_dir / f"{video_name}.es{ext}",
+                # Common suffixes
+                lambda ext: video_dir / f"{video_name}.eng{ext}",
+                lambda ext: video_dir / f"{video_name}.por{ext}",
+            ]
+            
             for ext in ['.srt', '.vtt', '.ass', '.ssa']:
-                sub_path = video_path.with_suffix(ext)
-                if sub_path.exists():
-                    self.load_subtitle(str(sub_path))
-                    break
+                for pattern in patterns:
+                    sub_path = pattern(ext)
+                    if sub_path.exists():
+                        print(f"Auto-detected subtitle: {sub_path.name}")
+                        self.load_subtitle(str(sub_path))
+                        break
+                else:
+                    continue  # Continue outer loop if inner didn't break
+                break  # Break outer loop if subtitle was found
         
         # Load subtitle style
         self.subtitle_style = self.config_manager.load_subtitle_style(file_path)
@@ -504,23 +527,50 @@ class VideoPlayer(QMainWindow):
     
     def load_subtitle(self, file_path: str):
         """Load subtitle file"""
-        self.current_subtitles = self.subtitle_parser.parse_file(file_path)
-        
-        if self.current_subtitles:
-            # Apply timing offset if set
-            if self.subtitle_style.timing_offset != 0:
-                self.current_subtitles = self.subtitle_parser.adjust_timing(
-                    self.current_subtitles,
-                    self.subtitle_style.timing_offset
+        try:
+            # Validate file exists
+            if not os.path.exists(file_path):
+                QMessageBox.warning(self, "File Not Found", f"Subtitle file not found:\n{file_path}")
+                return
+            
+            # Parse subtitle file
+            self.current_subtitles = self.subtitle_parser.parse_file(file_path)
+            
+            if self.current_subtitles:
+                # Apply timing offset if set
+                if self.subtitle_style.timing_offset != 0:
+                    self.current_subtitles = self.subtitle_parser.adjust_timing(
+                        self.current_subtitles,
+                        self.subtitle_style.timing_offset
+                    )
+                
+                # Save association with current video
+                if self.current_video:
+                    self.config_manager.set_subtitle_file_for_video(self.current_video, file_path)
+                    print(f"✓ Saved subtitle association: {os.path.basename(self.current_video)} → {os.path.basename(file_path)}")
+                
+                # Update status with subtitle count
+                subtitle_count = len(self.current_subtitles)
+                self.statusBar().showMessage(
+                    f"✓ Loaded {subtitle_count} subtitles from: {os.path.basename(file_path)}"
                 )
-            
-            # Save association
-            if self.current_video:
-                self.config_manager.set_subtitle_file_for_video(self.current_video, file_path)
-            
-            self.statusBar().showMessage(f"Loaded subtitles: {os.path.basename(file_path)}")
-        else:
-            QMessageBox.warning(self, "Error", "Could not parse subtitle file")
+                
+                # Log for debugging
+                print(f"✓ Loaded {subtitle_count} subtitles from: {file_path}")
+            else:
+                QMessageBox.warning(
+                    self, 
+                    "Parse Error", 
+                    f"Could not parse subtitle file:\n{os.path.basename(file_path)}\n\n"
+                    "Supported formats: SRT, VTT, ASS, SSA"
+                )
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Error Loading Subtitles",
+                f"An error occurred while loading subtitles:\n\n{str(e)}"
+            )
+            print(f"✗ Error loading subtitles: {e}")
     
     def play_pause(self):
         """Toggle play/pause"""

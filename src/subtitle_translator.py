@@ -49,6 +49,7 @@ class SubtitleTranslator:
         """Initialize translator with available backend"""
         self.translator = None
         self.backend = None
+        self.cache = {}  # Translation cache for performance
         
         # Try googletrans first
         try:
@@ -100,11 +101,54 @@ class SubtitleTranslator:
         
         # Get language code
         lang_code = self.LANGUAGE_CODES.get(target_language, "en")
-        
-        translated = []
         total = len(subtitles)
         
         logger.info(f"Starting translation of {total} subtitles to {target_language} ({lang_code})")
+        
+        # Phase 1: Extract unique texts for translation (deduplication)
+        unique_texts = {}
+        for i, sub in enumerate(subtitles):
+            text = sub.text.strip()
+            if text not in unique_texts:
+                unique_texts[text] = []
+            unique_texts[text].append(i)
+        
+        logger.info(f"Found {len(unique_texts)} unique texts (from {total} total subtitles)")
+        
+        # Phase 2: Check cache and identify texts to translate
+        cache_prefix = f"{lang_code}:"
+        to_translate = []
+        cached_count = 0
+        
+        for text in unique_texts.keys():
+            cache_key = cache_prefix + text
+            if cache_key not in self.cache:
+                to_translate.append(text)
+            else:
+                cached_count += 1
+        
+        if cached_count > 0:
+            logger.info(f"Cache hit: {cached_count}/{len(unique_texts)} texts (saving {cached_count * 0.5:.1f}s)")
+        
+        # Phase 3: Batch translate uncached texts
+        if to_translate:
+            logger.info(f"Translating {len(to_translate)} new texts...")
+            translations = self._batch_translate_texts(
+                to_translate,
+                lang_code,
+                progress_callback,
+                cancel_check,
+                len(to_translate),
+                total
+            )
+            
+            # Update cache
+            for original, translated in zip(to_translate, translations):
+                cache_key = cache_prefix + original
+                self.cache[cache_key] = translated
+        
+        # Phase 4: Build translated subtitle list
+        translated = []
         
         for i, subtitle in enumerate(subtitles):
             # Check if translation should be cancelled
@@ -114,18 +158,16 @@ class SubtitleTranslator:
                     progress_callback(f"Translation cancelled", int((i / total) * 100))
                 return translated  # Return partial results
             
+            # Report progress (less frequently since we're faster now)
+            if progress_callback and i % 50 == 0:
+                percentage = int((i / total) * 100)
+                progress_callback(f"Building subtitle {i+1}/{total}", percentage)
+            
             try:
-                # Report progress
-                if progress_callback and i % 10 == 0:
-                    percentage = int((i / total) * 100)
-                    progress_callback(f"Translating subtitle {i+1}/{total}", percentage)
-                
-                # Translate the text
-                translated_text = self._translate_text(subtitle.text, lang_code)
-                
-                # Check if translation actually happened (not just returned original)
-                if translated_text == subtitle.text and len(subtitle.text) > 1:
-                    logger.debug(f"Subtitle {i+1} unchanged, possibly untranslatable or already in target language")
+                # Get translated text from cache
+                text = subtitle.text.strip()
+                cache_key = cache_prefix + text
+                translated_text = self.cache.get(cache_key, text)
                 
                 # Create translated subtitle object
                 # Preserve original timing and structure
@@ -142,12 +184,8 @@ class SubtitleTranslator:
                 
                 translated.append(translated_sub)
                 
-                # Small delay to avoid rate limiting (every 50 subtitles)
-                if (i + 1) % 50 == 0 and i < total - 1:
-                    time.sleep(0.5)
-                
             except Exception as e:
-                logger.error(f"Error translating subtitle {i+1}: {e}")
+                logger.error(f"Error processing subtitle {i+1}: {e}")
                 # Keep original subtitle on error
                 translated.append(subtitle)
         
@@ -234,6 +272,102 @@ class SubtitleTranslator:
             # Catch-all for other errors
             logger.debug(f"Translation error for '{text[:30]}...': {e}, keeping original")
             return text
+    
+    def _batch_translate_texts(
+        self,
+        texts: List[str],
+        lang_code: str,
+        progress_callback: Optional[Callable[[str, int], None]] = None,
+        cancel_check: Optional[Callable[[], bool]] = None,
+        unique_count: int = 0,
+        total_subs: int = 0,
+        batch_size: int = 50
+    ) -> List[str]:
+        """
+        Optimized batch translation with progress tracking
+        
+        Args:
+            texts: List of unique texts to translate
+            lang_code: Target language code
+            progress_callback: Progress callback function
+            cancel_check: Cancellation check function
+            unique_count: Total unique texts (for progress)
+            total_subs: Total subtitle count (for context)
+            batch_size: Number of texts per batch
+            
+        Returns:
+            List of translated texts (same order as input)
+        """
+        results = []
+        total = len(texts)
+        
+        for batch_start in range(0, total, batch_size):
+            # Check for cancellation
+            if cancel_check and cancel_check():
+                logger.info(f"Translation cancelled during batch processing")
+                # Return what we have + original texts for remainder
+                remaining = texts[len(results):]
+                return results + remaining
+            
+            batch_end = min(batch_start + batch_size, total)
+            batch = texts[batch_start:batch_end]
+            batch_num = batch_start // batch_size + 1
+            total_batches = (total + batch_size - 1) // batch_size
+            
+            # Progress update
+            if progress_callback:
+                progress = int((batch_start / unique_count) * 90)  # Reserve 10% for building
+                progress_callback(
+                    f"Translating batch {batch_num}/{total_batches} ({len(batch)} texts)",
+                    progress
+                )
+            
+            logger.debug(f"Translating batch {batch_num}/{total_batches}: {len(batch)} texts")
+            
+            try:
+                # Try batch translation first
+                if self.backend == "googletrans" and len(batch) > 1:
+                    try:
+                        batch_results = self.translator.translate(batch, dest=lang_code)
+                        
+                        # Extract translated texts, handle errors gracefully
+                        translated_batch = []
+                        for i, (result, original) in enumerate(zip(batch_results, batch)):
+                            if result and hasattr(result, 'text') and result.text:
+                                translated_batch.append(result.text)
+                            else:
+                                logger.debug(f"Batch item {i} failed, keeping original")
+                                translated_batch.append(original)
+                        
+                        results.extend(translated_batch)
+                        logger.debug(f"Batch {batch_num} completed successfully")
+                        continue  # Success, move to next batch
+                        
+                    except Exception as e:
+                        logger.warning(f"Batch translation failed for batch {batch_num}: {e}")
+                        # Fall through to individual translation
+                
+                # Fall back to individual translation
+                logger.debug(f"Using individual translation for batch {batch_num}")
+                for text in batch:
+                    try:
+                        translated = self._translate_text(text, lang_code)
+                        results.append(translated)
+                    except Exception as e:
+                        logger.error(f"Individual translation failed: {e}")
+                        results.append(text)  # Keep original
+                
+                # Small delay between batches to avoid rate limiting
+                if batch_end < total:
+                    time.sleep(0.1)
+                    
+            except Exception as e:
+                logger.error(f"Batch {batch_num} failed completely: {e}")
+                # Keep all original texts for this batch
+                results.extend(batch)
+        
+        logger.info(f"Batch translation completed: {len(results)}/{total} texts")
+        return results
     
     def batch_translate(
         self,
