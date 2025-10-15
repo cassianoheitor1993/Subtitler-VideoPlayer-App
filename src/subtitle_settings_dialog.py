@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QSpinBox, QDoubleSpinBox, QComboBox, QGroupBox, QCheckBox,
     QColorDialog, QFontComboBox, QGridLayout, QScrollArea, QWidget,
-    QSizePolicy
+    QSizePolicy, QProgressBar, QMessageBox
 )
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QColor, QFont, QResizeEvent
@@ -299,6 +299,26 @@ class SubtitleSettingsDialog(QDialog):
         self.translate_btn = QPushButton("🌐 Translate Subtitles")
         self.translate_btn.clicked.connect(self.translate_subtitles)
         translation_layout.addWidget(self.translate_btn)
+        
+        # Progress bar for translation
+        self.translation_progress = QProgressBar()
+        self.translation_progress.setVisible(False)
+        self.translation_progress.setMinimum(0)
+        self.translation_progress.setMaximum(100)
+        self.translation_progress.setTextVisible(True)
+        self.translation_progress.setStyleSheet("""
+            QProgressBar {
+                border: 2px solid #3d3d3d;
+                border-radius: 5px;
+                text-align: center;
+                height: 25px;
+            }
+            QProgressBar::chunk {
+                background-color: #4CAF50;
+                border-radius: 3px;
+            }
+        """)
+        translation_layout.addWidget(self.translation_progress)
         
         self.translation_status = QLabel("")
         self.translation_status.setWordWrap(True)
@@ -601,18 +621,30 @@ class SubtitleSettingsDialog(QDialog):
         
         # Show translation progress
         self.translation_status.setText(f"🔄 Translating to {target_lang}...")
+        self.translation_progress.setValue(0)
+        self.translation_progress.setVisible(True)
         self.translate_btn.setEnabled(False)
+        
+        # Progress callback to update both status and progress bar
+        def update_progress(msg, pct):
+            self.translation_status.setText(f"{msg}")
+            self.translation_progress.setValue(int(pct))
+            # Process events to keep UI responsive
+            from PyQt6.QtWidgets import QApplication
+            QApplication.processEvents()
         
         try:
             translator = SubtitleTranslator()
             translated_subs = translator.translate_subtitles(
                 self.subtitles,
                 target_lang,
-                lambda msg, pct: self.translation_status.setText(f"{msg} ({pct}%)")
+                update_progress
             )
             
             if not translated_subs:
                 self.translation_status.setText("❌ Translation failed")
+                self.translation_progress.setVisible(False)
+                self.translate_btn.setEnabled(True)
                 return
             
             # Save translated subtitles to file
@@ -636,9 +668,14 @@ class SubtitleSettingsDialog(QDialog):
                 f.write(content)
             
             # Success message with option to load
+            self.translation_progress.setValue(100)
             self.translation_status.setText(
                 f"✓ Saved: {os.path.basename(output_path)}"
             )
+            
+            # Hide progress bar after a short delay
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(1000, lambda: self.translation_progress.setVisible(False))
             
             reply = QMessageBox.question(
                 self,
@@ -659,6 +696,7 @@ class SubtitleSettingsDialog(QDialog):
             import traceback
             error_details = traceback.format_exc()
             self.translation_status.setText(f"❌ Error: {str(e)}")
+            self.translation_progress.setVisible(False)
             QMessageBox.critical(
                 self,
                 "Translation Error",
