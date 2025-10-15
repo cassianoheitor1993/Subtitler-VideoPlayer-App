@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.cassianoheitor.subtitleplayer</id>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+  <name>SubtitlePlayer</name>
+  <summary>Professional video player with subtitle download and AI generation</summary>
+  
+  <description>
+    <p>
+      SubtitlePlayer is a powerful, feature-rich video player for Linux that makes
+      working with subtitles effortless. Whether you need to download subtitles from
+      OpenSubtitles.org or generate them automatically using AI, SubtitlePlayer has you covered.
+    </p>
+    <p>Key Features:</p>
+    <ul>
+      <li>Play videos in all major formats (MP4, AVI, MKV, MOV, WMV, FLV, WebM)</li>
+      <li>Download subtitles from OpenSubtitles.org database</li>
+      <li>AI-powered subtitle generation using OpenAI Whisper (supports 99+ languages)</li>
+      <li>Extensive subtitle customization (font, size, color, position, timing)</li>
+      <li>Click-to-seek timeline for quick navigation</li>
+      <li>Right-click context menu for instant access to all features</li>
+      <li>Double-click fullscreen toggle</li>
+      <li>Per-video subtitle preferences that persist</li>
+      <li>Modern, professional PyQt6 interface</li>
+      <li>Keyboard shortcuts for power users</li>
+    </ul>
+    <p>
+      Perfect for language learners, accessibility needs, content creators, and anyone
+      who wants a better video watching experience with complete subtitle control.
+    </p>
+  </description>
+  
+  <launchable type="desktop-id">subtitleplayer.desktop</launchable>
+  
+  <screenshots>
+    <screenshot type="default">
+      <caption>Main player window with video and subtitles</caption>
+    </screenshot>
+    <screenshot>
+      <caption>Subtitle search and download dialog</caption>
+    </screenshot>
+    <screenshot>
+      <caption>AI subtitle generation interface</caption>
+    </screenshot>
+    <screenshot>
+      <caption>Comprehensive subtitle customization settings</caption>
+    </screenshot>
+  </screenshots>
+  
+  <url type="homepage">https://github.com/cassianoheitor1993/SubtitlePlayer</url>
+  <url type="bugtracker">https://github.com/cassianoheitor1993/SubtitlePlayer/issues</url>
+  <url type="help">https://github.com/cassianoheitor1993/SubtitlePlayer/blob/main/README.md</url>
+  
+  <developer_name>Cassiano Heitor</developer_name>
+  <update_contact>cassianoheitor1993@gmail.com</update_contact>
+  
+  <provides>
+    <binary>subtitleplayer</binary>
+  </provides>
+  
+  <releases>
+    <release version="1.1.0" date="2025-10-15">
+      <description>
+        <p>Major feature release with UX improvements and AI integration:</p>
+        <ul>
+          <li>Added click-to-seek timeline navigation</li>
+          <li>Added double-click fullscreen toggle</li>
+          <li>Added right-click context menu</li>
+          <li>Integrated AI subtitle generation (Whisper)</li>
+          <li>Support for 99+ languages in AI generation</li>
+          <li>Fixed QFont type error in settings</li>
+          <li>Enhanced keyboard shortcuts</li>
+        </ul>
+      </description>
+    </release>
+    <release version="1.0.0" date="2025-10-14">
+      <description>
+        <p>Initial release:</p>
+        <ul>
+          <li>Video playback with VLC backend</li>
+          <li>OpenSubtitles.org integration</li>
+          <li>Subtitle format support (SRT, VTT, ASS)</li>
+          <li>Comprehensive subtitle customization</li>
+          <li>Per-video preference persistence</li>
+        </ul>
+      </description>
+    </release>
+  </releases>
+  
+  <content_rating type="oars-1.1" />
+  
+  <categories>
+    <category>AudioVideo</category>
+    <category>Video</category>
+    <category>Player</category>
+  </categories>
+  
+  <keywords>
+    <keyword>video</keyword>
+    <keyword>player</keyword>
+    <keyword>subtitles</keyword>
+    <keyword>media</keyword>
+    <keyword>AI</keyword>
+    <keyword>transcription</keyword>
+  </keywords>
+</component>

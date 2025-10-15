@@ -1,0 +1,122 @@
+name: subtitleplayer
+base: core22
+version: '1.1.0'
+summary: Professional video player with subtitle download and AI generation
+description: |
+  SubtitlePlayer is a powerful, feature-rich video player for Linux that makes
+  working with subtitles effortless. Download subtitles from OpenSubtitles.org,
+  generate them automatically using AI, and customize appearance to your liking.
+
+  Key Features:
+  * Play videos in all major formats (MP4, AVI, MKV, etc.)
+  * Download subtitles from OpenSubtitles.org database
+  * AI-powered subtitle generation using Whisper (99+ languages)
+  * Customize subtitle appearance (font, size, color, position)
+  * Click-to-seek timeline navigation
+  * Right-click context menu for quick actions
+  * Double-click fullscreen mode
+  * Per-video subtitle preferences
+  * Modern, professional interface
+
+grade: stable
+confinement: strict
+
+architectures:
+  - build-on: amd64
+
+apps:
+  subtitleplayer:
+    command: bin/subtitleplayer-launcher
+    extensions: [gnome]
+    plugs:
+      - home
+      - network
+      - network-bind
+      - audio-playback
+      - desktop
+      - desktop-legacy
+      - wayland
+      - x11
+      - opengl
+      - removable-media
+      - screen-inhibit-control
+    environment:
+      PYTHONPATH: $SNAP/lib/python3.10/site-packages:$SNAP/usr/lib/python3/dist-packages
+      LD_LIBRARY_PATH: $SNAP/usr/lib/$SNAPCRAFT_ARCH_TRIPLET:$SNAP/usr/lib/$SNAPCRAFT_ARCH_TRIPLET/pulseaudio
+      VLC_PLUGIN_PATH: $SNAP/usr/lib/$SNAPCRAFT_ARCH_TRIPLET/vlc/plugins
+      QT_QPA_PLATFORM_PLUGIN_PATH: $SNAP/usr/lib/$SNAPCRAFT_ARCH_TRIPLET/qt6/plugins
+
+parts:
+  subtitleplayer:
+    plugin: python
+    source: .
+    python-packages:
+      - PyQt6
+      - python-vlc
+      - requests
+      - chardet
+      - pysrt
+    stage-packages:
+      - python3
+      - python3-pip
+      - vlc
+      - libvlc-dev
+      - libvlc5
+      - libvlccore9
+      - vlc-plugin-base
+      - vlc-plugin-video-output
+      - libqt6core6
+      - libqt6gui6
+      - libqt6widgets6
+      - libqt6network6
+      - qt6-qpa-plugins
+      - libpulse0
+      - libpulse-mainloop-glib0
+      - libx11-6
+      - libxext6
+      - libxcb1
+      - libxcb-cursor0
+      - libxcb-xkb1
+      - libxkbcommon0
+      - libxkbcommon-x11-0
+      - libgl1
+      - libglu1-mesa
+      - libdrm2
+      - libgbm1
+      - libegl1
+      - libwayland-client0
+      - libwayland-cursor0
+      - libwayland-egl1
+      - libdbus-1-3
+      - libfontconfig1
+      - libfreetype6
+      - ffmpeg
+    override-build: |
+      craftctl default
+      # Create launcher script
+      mkdir -p $SNAPCRAFT_PART_INSTALL/bin
+      cat > $SNAPCRAFT_PART_INSTALL/bin/subtitleplayer-launcher << 'EOF'
+      #!/bin/bash
+      exec python3 $SNAP/src/video_player.py "$@"
+      EOF
+      chmod +x $SNAPCRAFT_PART_INSTALL/bin/subtitleplayer-launcher
+
+  desktop-file:
+    plugin: dump
+    source: snap/gui
+    organize:
+      subtitleplayer.desktop: usr/share/applications/subtitleplayer.desktop
+      subtitleplayer.png: usr/share/icons/hicolor/256x256/apps/subtitleplayer.png
+
+  ai-models:
+    plugin: nil
+    override-build: |
+      # AI models are optional and downloaded on-demand by users
+      # We just document this in the snap
+      craftctl default
+
+layout:
+  /usr/lib/$SNAPCRAFT_ARCH_TRIPLET/vlc:
+    bind: $SNAP/usr/lib/$SNAPCRAFT_ARCH_TRIPLET/vlc
+  /usr/share/vlc:
+    bind: $SNAP/usr/share/vlc

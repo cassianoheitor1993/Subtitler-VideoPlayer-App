@@ -1,0 +1,23 @@
+[Desktop Entry]
+Version=1.1
+Type=Application
+Name=SubtitlePlayer
+GenericName=Video Player
+Comment=Professional video player with subtitle download and AI generation
+Icon=subtitleplayer
+Exec=subtitleplayer %F
+Terminal=false
+Categories=AudioVideo;Video;Player;Qt;
+MimeType=video/x-msvideo;video/mp4;video/mpeg;video/x-matroska;video/webm;video/quicktime;video/x-flv;video/x-ms-wmv;
+Keywords=video;player;subtitles;media;movie;film;clip;
+StartupNotify=true
+StartupWMClass=SubtitlePlayer
+Actions=open-video;download-subtitles;
+
+[Desktop Action open-video]
+Name=Open Video
+Exec=subtitleplayer
+
+[Desktop Action download-subtitles]
+Name=Download Subtitles
+Exec=subtitleplayer --download-subtitles
