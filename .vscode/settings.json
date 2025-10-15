@@ -1,0 +1,37 @@
+{
+    "python.defaultInterpreterPath": "/home/cmedeiros/Documents/Cassiano-Portfolio/.venv/bin/python",
+    "python.testing.pytestEnabled": true,
+    "python.testing.pytestArgs": [
+        "tests"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.linting.enabled": true,
+    "python.linting.pylintEnabled": false,
+    "python.linting.flake8Enabled": true,
+    "python.formatting.provider": "black",
+    "python.analysis.typeCheckingMode": "basic",
+    "python.analysis.autoImportCompletions": true,
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": "explicit"
+    },
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.python",
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true
+    },
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/*.pyc": true,
+        "**/*.pyo": true,
+        "**/.pytest_cache": true,
+        "**/.coverage": true,
+        "**/*.egg-info": true
+    },
+    "files.watcherExclude": {
+        "**/__pycache__": true,
+        "**/venv": true,
+        "**/.git/objects/**": true,
+        "**/.git/subtree-cache/**": true
+    }
+}

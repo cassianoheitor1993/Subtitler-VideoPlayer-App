@@ -1,0 +1,97 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "SubtitlePlayer: Run Application",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/video_player.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceFolder}",
+            "python": "/home/cmedeiros/Documents/Cassiano-Portfolio/.venv/bin/python",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src",
+                "VLC_VERBOSE": "-1"
+            }
+        },
+        {
+            "name": "SubtitlePlayer: Run with Arguments",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/video_player.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceFolder}",
+            "python": "/home/cmedeiros/Documents/Cassiano-Portfolio/.venv/bin/python",
+            "args": [
+                // Add video file path here for testing
+                // "${workspaceFolder}/test_video.mp4"
+            ],
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src",
+                "VLC_VERBOSE": "-1"
+            }
+        },
+        {
+            "name": "SubtitlePlayer: Debug (Show All Frames)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/video_player.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "cwd": "${workspaceFolder}",
+            "python": "/home/cmedeiros/Documents/Cassiano-Portfolio/.venv/bin/python",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src",
+                "VLC_VERBOSE": "-1"
+            }
+        },
+        {
+            "name": "Python: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src"
+            }
+        },
+        {
+            "name": "SubtitlePlayer: Run Tests",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "args": [
+                "tests/",
+                "-v",
+                "-s"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src"
+            }
+        },
+        {
+            "name": "SubtitlePlayer: Test Specific Module",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "args": [
+                "${file}",
+                "-v",
+                "-s"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src"
+            }
+        }
+    ]
+}
