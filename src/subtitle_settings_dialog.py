@@ -55,11 +55,13 @@ class ColorButton(QPushButton):
 class SubtitleSettingsDialog(QDialog):
     """Dialog for configuring subtitle appearance"""
     
-    def __init__(self, current_style: SubtitleStyle, parent=None, subtitles=None, current_time_func=None):
+    def __init__(self, current_style: SubtitleStyle, parent=None, subtitles=None, current_time_func=None, video_path=None, subtitle_path=None):
         super().__init__(parent)
         self.current_style = current_style
         self.subtitles = subtitles or []
         self.current_time_func = current_time_func
+        self.video_path = video_path
+        self.subtitle_path = subtitle_path
         self.init_ui()
         self.load_settings()
     
@@ -516,9 +518,11 @@ class SubtitleSettingsDialog(QDialog):
         return f"{mins:02d}:{secs:02d}"
     
     def translate_subtitles(self):
-        """Translate subtitles to selected language"""
+        """Translate subtitles to selected language and save to new file"""
+        import os
+        from PyQt6.QtWidgets import QMessageBox
+        
         if not self.subtitles:
-            from PyQt6.QtWidgets import QMessageBox
             QMessageBox.warning(
                 self,
                 "No Subtitles",
@@ -531,11 +535,18 @@ class SubtitleSettingsDialog(QDialog):
             self.translation_status.setText("Please select a target language")
             return
         
+        if not self.subtitle_path:
+            QMessageBox.warning(
+                self,
+                "No Subtitle File",
+                "Cannot translate: no subtitle file is currently loaded."
+            )
+            return
+        
         # Check if translation module is available
         try:
             from subtitle_translator import SubtitleTranslator
         except ImportError:
-            from PyQt6.QtWidgets import QMessageBox
             QMessageBox.information(
                 self,
                 "Translation Feature",
@@ -547,7 +558,48 @@ class SubtitleSettingsDialog(QDialog):
             )
             return
         
-        # Show translation dialog
+        # Generate output filename
+        base_name = os.path.splitext(self.subtitle_path)[0]
+        extension = os.path.splitext(self.subtitle_path)[1]
+        
+        # Create language code for filename (e.g., "en-US", "pt-BR")
+        lang_codes = {
+            "English (US)": "en-US",
+            "English (UK)": "en-UK",
+            "English (Canada)": "en-CA",
+            "Portuguese (Brazil)": "pt-BR",
+            "Portuguese (Portugal)": "pt-PT",
+            "Spanish (Spain)": "es-ES",
+            "Spanish (Latin America)": "es-LA",
+            "Chinese (Simplified)": "zh-CN",
+            "Chinese (Traditional)": "zh-TW",
+            "French": "fr",
+            "German": "de",
+            "Italian": "it",
+            "Japanese": "ja",
+            "Korean": "ko",
+            "Russian": "ru",
+            "Arabic": "ar",
+            "Hindi": "hi"
+        }
+        
+        lang_code = lang_codes.get(target_lang, "translated")
+        output_path = f"{base_name}.{lang_code}{extension}"
+        
+        # Check if file already exists
+        if os.path.exists(output_path):
+            reply = QMessageBox.question(
+                self,
+                "File Exists",
+                f"Translated file already exists:\n{os.path.basename(output_path)}\n\n"
+                "Do you want to overwrite it?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                self.translation_status.setText("Translation cancelled")
+                return
+        
+        # Show translation progress
         self.translation_status.setText(f"🔄 Translating to {target_lang}...")
         self.translate_btn.setEnabled(False)
         
@@ -559,17 +611,61 @@ class SubtitleSettingsDialog(QDialog):
                 lambda msg, pct: self.translation_status.setText(f"{msg} ({pct}%)")
             )
             
-            if translated_subs:
-                self.subtitles = translated_subs
-                self.translation_status.setText(f"✓ Translated {len(translated_subs)} subtitles to {target_lang}")
-                # Signal that subtitles have changed
-                if hasattr(self, 'subtitles_changed'):
-                    self.subtitles_changed.emit(translated_subs)
-            else:
+            if not translated_subs:
                 self.translation_status.setText("❌ Translation failed")
+                return
+            
+            # Save translated subtitles to file
+            from subtitle_parser import SubtitleParser
+            parser = SubtitleParser()
+            
+            # Determine format from extension
+            if extension.lower() == '.srt':
+                content = parser.write_srt(translated_subs)
+            elif extension.lower() == '.vtt':
+                content = parser.write_vtt(translated_subs)
+            elif extension.lower() in ['.ass', '.ssa']:
+                content = parser.write_ass(translated_subs)
+            else:
+                # Default to SRT
+                content = parser.write_srt(translated_subs)
+                output_path = f"{base_name}.{lang_code}.srt"
+            
+            # Write to file
+            with open(output_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            # Success message with option to load
+            self.translation_status.setText(
+                f"✓ Saved: {os.path.basename(output_path)}"
+            )
+            
+            reply = QMessageBox.question(
+                self,
+                "Translation Complete",
+                f"Successfully translated {len(translated_subs)} subtitles to {target_lang}!\n\n"
+                f"Saved as: {os.path.basename(output_path)}\n\n"
+                "Would you like to load the translated subtitles now?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                # Signal to parent to load the new subtitle file
+                if self.parent():
+                    self.parent().load_subtitle(output_path)
+                self.accept()  # Close dialog
                 
         except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
             self.translation_status.setText(f"❌ Error: {str(e)}")
+            QMessageBox.critical(
+                self,
+                "Translation Error",
+                f"An error occurred during translation:\n\n{str(e)}\n\n"
+                "Check the console for details."
+            )
+            print(f"Translation error details:\n{error_details}")
         finally:
             self.translate_btn.setEnabled(True)
     

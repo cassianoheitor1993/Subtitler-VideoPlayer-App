@@ -278,3 +278,102 @@ class SubtitleParser:
                 style=entry.style
             ))
         return adjusted
+    
+    @staticmethod
+    def format_srt_time(seconds: float) -> str:
+        """Convert seconds to SRT timestamp format (HH:MM:SS,mmm)"""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        milliseconds = int((seconds % 1) * 1000)
+        return f"{hours:02d}:{minutes:02d}:{secs:02d},{milliseconds:03d}"
+    
+    @staticmethod
+    def format_vtt_time(seconds: float) -> str:
+        """Convert seconds to VTT timestamp format (HH:MM:SS.mmm)"""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        milliseconds = int((seconds % 1) * 1000)
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}.{milliseconds:03d}"
+    
+    def write_srt(self, entries: List[SubtitleEntry]) -> str:
+        """
+        Write subtitle entries to SRT format
+        
+        Args:
+            entries: List of subtitle entries
+            
+        Returns:
+            SRT formatted string
+        """
+        lines = []
+        for entry in entries:
+            lines.append(str(entry.index))
+            start_time = self.format_srt_time(entry.start_time)
+            end_time = self.format_srt_time(entry.end_time)
+            lines.append(f"{start_time} --> {end_time}")
+            lines.append(entry.text)
+            lines.append("")  # Empty line between entries
+        return "\n".join(lines)
+    
+    def write_vtt(self, entries: List[SubtitleEntry]) -> str:
+        """
+        Write subtitle entries to VTT format
+        
+        Args:
+            entries: List of subtitle entries
+            
+        Returns:
+            VTT formatted string
+        """
+        lines = ["WEBVTT", ""]
+        for entry in entries:
+            start_time = self.format_vtt_time(entry.start_time)
+            end_time = self.format_vtt_time(entry.end_time)
+            lines.append(f"{start_time} --> {end_time}")
+            lines.append(entry.text)
+            lines.append("")  # Empty line between entries
+        return "\n".join(lines)
+    
+    def write_ass(self, entries: List[SubtitleEntry]) -> str:
+        """
+        Write subtitle entries to ASS format
+        
+        Args:
+            entries: List of subtitle entries
+            
+        Returns:
+            ASS formatted string
+        """
+        # Basic ASS header
+        lines = [
+            "[Script Info]",
+            "Title: Translated Subtitles",
+            "ScriptType: v4.00+",
+            "",
+            "[V4+ Styles]",
+            "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
+            "Style: Default,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1",
+            "",
+            "[Events]",
+            "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
+        ]
+        
+        for entry in entries:
+            start_time = self._format_ass_time(entry.start_time)
+            end_time = self._format_ass_time(entry.end_time)
+            # Replace newlines with \N for ASS format
+            text = entry.text.replace('\n', '\\N')
+            lines.append(f"Dialogue: 0,{start_time},{end_time},Default,,0,0,0,,{text}")
+        
+        return "\n".join(lines)
+    
+    @staticmethod
+    def _format_ass_time(seconds: float) -> str:
+        """Convert seconds to ASS timestamp format (H:MM:SS.cc)"""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        centiseconds = int((seconds % 1) * 100)
+        return f"{hours}:{minutes:02d}:{secs:02d}.{centiseconds:02d}"
