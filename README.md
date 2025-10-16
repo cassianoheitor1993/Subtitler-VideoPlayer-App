@@ -28,6 +28,7 @@ A professional video player for Linux with native subtitle download support thro
 - 🎯 **Auto-load Subtitles**: Automatically finds and loads subtitle files
 - 🖱️ **Interactive Timeline**: Click to seek, double-click for fullscreen
 - 📱 **Right-click Context Menu**: Quick access to common actions
+- 🛰️ **Local Network Casting (Beta)**: Stream the active video over HTTP to other devices on your LAN
 
 ## Screenshots
 
@@ -158,6 +159,12 @@ chmod +x run.sh
    - **Ctrl+S**: Load subtitle file
    - **Ctrl+D**: Download subtitles
    - **Ctrl+Q**: Quit application
+
+5. **Start a Local Network Cast**:
+   1. Load a video and let playback begin.
+   2. Open the **Cast** menu (or right-click the video) and choose **Start HTTP Cast**.
+   3. Share the displayed URL (default `http://<your-ip>:8080/`) with another device and open it in VLC or a compatible player.
+   4. Use **Stop Cast** from the same menu to terminate the stream.
 
 ## Configuration
 

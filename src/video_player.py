@@ -5,13 +5,14 @@ Professional video player with VLC backend and subtitle support
 
 import sys
 import os
+import socket
 from pathlib import Path
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QSlider, QLabel, QFileDialog, QFrame, QStyle, QApplication,
-    QMenu, QMessageBox
+    QMenu, QMessageBox, QSplitter, QSplitterHandle, QSizePolicy
 )
-from PyQt6.QtCore import Qt, QTimer, QUrl
+from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal, QPoint
 from PyQt6.QtGui import QAction, QPalette, QColor, QFont, QPainter, QPen
 import vlc
 
@@ -22,6 +23,64 @@ warnings.filterwarnings('ignore')
 
 from subtitle_parser import SubtitleParser, SubtitleEntry
 from config_manager import ConfigManager, SubtitleStyle
+from casting_manager import CastingManager, CastingError, CastingConfig
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+SAMPLE_VIDEO_PATH = PROJECT_ROOT / "temp" / "sample.mp4"
+SAMPLE_CAST_URL_FILE = PROJECT_ROOT / "temp" / "start_cast_url.txt"
+SAMPLE_CAST_LOG_FILE = PROJECT_ROOT / "temp" / "start_cast.log"
+
+
+class SidebarSplitterHandle(QSplitterHandle):
+    """Custom splitter handle with hand cursor and styled appearance"""
+
+    def __init__(self, orientation, parent):
+        super().__init__(orientation, parent)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setStyleSheet("background-color: #1c1c1c;")
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor("#1c1c1c"))
+        handle_rect = self.rect()
+        center_x = handle_rect.width() // 2
+        top = handle_rect.height() // 2 - 12
+        painter.setPen(QPen(QColor("#3a3a3a"), 2))
+        for i in range(3):
+            y = top + i * 8
+            painter.drawLine(center_x - 6, y, center_x + 6, y)
+
+
+class SidebarSplitter(QSplitter):
+    """Splitter that uses custom handles"""
+
+    def __init__(self, orientation, parent=None):
+        super().__init__(orientation, parent)
+        self.setChildrenCollapsible(False)
+        self.setHandleWidth(10)
+
+    def createHandle(self):
+        return SidebarSplitterHandle(self.orientation(), self)
+
+
+class VideoFrame(QWidget):
+    """Custom video frame widget with proper event handling"""
+    
+    double_clicked = pyqtSignal()
+    resized = pyqtSignal()
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet("background-color: #000000;")
+    
+    def mouseDoubleClickEvent(self, event):
+        """Handle double-click events"""
+        self.double_clicked.emit()
+        super().mouseDoubleClickEvent(event)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.resized.emit()
 
 
 class SubtitleOverlay(QLabel):
@@ -63,30 +122,45 @@ class SubtitleOverlay(QLabel):
         metrics = painter.fontMetrics()
         lines = self.subtitle_text.split('\n')
         line_height = metrics.height()
-        max_width = max(metrics.horizontalAdvance(line) for line in lines)
+        line_rects = [metrics.boundingRect(line) for line in lines]
+        line_widths = [rect.width() for rect in line_rects]
+        max_width = max(line_widths) if line_widths else 0
         total_height = line_height * len(lines)
-        
-        # Calculate position
-        x = 0
-        if self.style.position_horizontal == 'center':
-            x = (self.width() - max_width) // 2
-        elif self.style.position_horizontal == 'left':
-            x = self.style.margin_horizontal
-        else:  # right
-            x = self.width() - max_width - self.style.margin_horizontal
-        
+
+        # Vertical anchor
         if self.style.position_vertical == 'bottom':
             y = self.height() - total_height - self.style.margin_vertical
         elif self.style.position_vertical == 'top':
             y = self.style.margin_vertical
         else:  # center
             y = (self.height() - total_height) // 2
+
+        # Block background anchor
+        if self.style.position_horizontal == 'center':
+            block_x = (self.width() - max_width) // 2
+        elif self.style.position_horizontal == 'left':
+            block_x = self.style.margin_horizontal
+        else:
+            block_x = self.width() - max_width - self.style.margin_horizontal
+
+        # Per-line horizontal positions
+        line_x_positions = []
+        for width in line_widths:
+            if self.style.position_horizontal == 'center':
+                line_x = (self.width() - width) // 2
+            elif self.style.position_horizontal == 'left':
+                line_x = self.style.margin_horizontal
+            else:
+                line_x = self.width() - width - self.style.margin_horizontal
+            line_x_positions.append(line_x)
+        if not line_x_positions:
+            line_x_positions = [block_x]
         
         # Draw background
         if self.style.background_color:
             bg_color = QColor(self.style.background_color)
             painter.fillRect(
-                x - 10, y - 5,
+                block_x - 10, y - 5,
                 max_width + 20, total_height + 10,
                 bg_color
             )
@@ -99,13 +173,13 @@ class SubtitleOverlay(QLabel):
             
             for i, line in enumerate(lines):
                 line_y = y + (i + 1) * line_height
-                painter.drawText(x, line_y, line)
+                painter.drawText(line_x_positions[i], line_y, line)
         
         # Draw text
         painter.setPen(QColor(self.style.text_color))
         for i, line in enumerate(lines):
             line_y = y + (i + 1) * line_height
-            painter.drawText(x, line_y, line)
+            painter.drawText(line_x_positions[i], line_y, line)
 
 
 class VideoPlayer(QMainWindow):
@@ -119,6 +193,9 @@ class VideoPlayer(QMainWindow):
         self.current_video = None
         self.current_subtitles = []
         self.subtitle_style = SubtitleStyle()
+        self.subtitle_settings_dialog = None
+        self.playback_rate = 1.0
+        self._sample_autoplayed = False
         
         # VLC setup with suppressed logging
         vlc_args = [
@@ -126,9 +203,12 @@ class VideoPlayer(QMainWindow):
             '--quiet',
             '--no-video-title-show',
             '--avcodec-hw=none',  # Disable hardware acceleration to avoid errors
+            '--no-sub-autodetect-file',  # Don't auto-detect subtitle files
+            '--sub-track=-1',  # Disable embedded subtitle tracks
         ]
         self.instance = vlc.Instance(vlc_args)
         self.media_player = self.instance.media_player_new()
+        self.casting_manager = CastingManager(self.instance)
         
         # Timer for updating UI
         self.timer = QTimer(self)
@@ -137,6 +217,7 @@ class VideoPlayer(QMainWindow):
         
         self.init_ui()
         self.apply_theme()
+        QTimer.singleShot(0, self._autoplay_sample_video)
         
     def init_ui(self):
         """Initialize user interface"""
@@ -147,50 +228,89 @@ class VideoPlayer(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
-        # Main layout
-        layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        central_widget.setLayout(layout)
+        # Main vertical layout
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        central_widget.setLayout(main_layout)
+
+        # Splitter for video and sidebar
+        self.splitter = SidebarSplitter(Qt.Orientation.Horizontal)
+        self.splitter.setStyleSheet("QSplitter::handle { background-color: #1c1c1c; }")
+        self.splitter.splitterMoved.connect(lambda *_: self.update_subtitle_window_geometry())
+
+        # Left side - video container
+        left_widget = QWidget()
+        left_layout = QVBoxLayout()
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(0)
+        left_widget.setLayout(left_layout)
         
         # Video frame with subtitle overlay
-        self.video_frame = QFrame()
-        self.video_frame.setStyleSheet("background-color: #000000;")
+        self.video_frame = VideoFrame()
         self.video_frame.setMinimumHeight(400)
         self.video_frame.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.video_frame.customContextMenuRequested.connect(self.show_video_context_menu)
         
-        # Enable mouse tracking for double-click
-        self.video_frame.mouseDoubleClickEvent = self.video_double_click
+        # Connect double-click signal
+        self.video_frame.double_clicked.connect(self.video_double_click)
+        self.video_frame.resized.connect(self.update_subtitle_window_geometry)
         
-        # Create stacked layout for video and subtitles
-        video_layout = QVBoxLayout()
-        video_layout.setContentsMargins(0, 0, 0, 0)
-        self.video_frame.setLayout(video_layout)
-        
-        # Subtitle overlay
-        self.subtitle_overlay = SubtitleOverlay(self.video_frame)
-        self.subtitle_overlay.setGeometry(0, 0, 1200, 600)
-        
-        layout.addWidget(self.video_frame, stretch=1)
-        
+        left_layout.addWidget(self.video_frame, stretch=1)
+
+        # Right side - subtitle settings sidebar container
+        from subtitle_settings_sidebar import SubtitleSettingsSidebar
+        self.sidebar_container = QWidget()
+        self.sidebar_container.setMinimumWidth(260)
+        self.sidebar_container.setMaximumWidth(480)
+        self.sidebar_container.setStyleSheet("background-color: #101010;")
+        sidebar_layout = QVBoxLayout()
+        sidebar_layout.setContentsMargins(0, 0, 0, 0)
+        sidebar_layout.setSpacing(0)
+        sidebar_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.sidebar_container.setLayout(sidebar_layout)
+
+        self.subtitle_sidebar = SubtitleSettingsSidebar(self.subtitle_style)
+        self.subtitle_sidebar.settings_changed.connect(self.on_sidebar_settings_changed)
+        self.subtitle_sidebar.toggle_legacy.connect(self.show_subtitle_settings)
+        sidebar_layout.addWidget(self.subtitle_sidebar)
+
+        # Add widgets to splitter
+        self.splitter.addWidget(left_widget)
+        self.splitter.addWidget(self.sidebar_container)
+
+        # Start with sidebar hidden
+        self.sidebar_visible = False
+        self.sidebar_container.hide()
+        self.subtitle_sidebar.hide()
+        self.splitter.setSizes([self.width(), 0])
+
+        # Add splitter to main layout
+        main_layout.addWidget(self.splitter, stretch=1)
+
         # Control panel
         control_panel = self.create_control_panel()
-        layout.addWidget(control_panel)
+        main_layout.addWidget(control_panel)
         
         # Menu bar
         self.create_menu_bar()
         
         # Status bar
         self.statusBar().showMessage("Ready")
+        self.cast_status_label = QLabel("")
+        self.cast_status_label.setStyleSheet("color: #8cdaff;")
+        self.statusBar().addPermanentWidget(self.cast_status_label)
         
-        # Connect VLC to video frame
+        # Connect VLC to video frame - this embeds the video natively
         if sys.platform.startswith('linux'):
             self.media_player.set_xwindow(int(self.video_frame.winId()))
         elif sys.platform == "win32":
             self.media_player.set_hwnd(int(self.video_frame.winId()))
         elif sys.platform == "darwin":
             self.media_player.set_nsobject(int(self.video_frame.winId()))
+        
+        # Create a separate window for subtitles that stays on top
+        self.create_subtitle_window()
     
     def create_control_panel(self):
         """Create video control panel"""
@@ -259,10 +379,15 @@ class VideoPlayer(QMainWindow):
         self.download_subtitle_btn.setEnabled(False)
         controls_layout.addWidget(self.download_subtitle_btn)
         
-        # Subtitle settings button
-        self.subtitle_settings_btn = QPushButton("Subtitle Settings")
-        self.subtitle_settings_btn.clicked.connect(self.show_subtitle_settings)
-        controls_layout.addWidget(self.subtitle_settings_btn)
+        # Subtitle settings sidebar toggle button
+        self.toggle_sidebar_btn = QPushButton("⚙ Settings Sidebar")
+        self.toggle_sidebar_btn.clicked.connect(self.toggle_subtitle_sidebar)
+        controls_layout.addWidget(self.toggle_sidebar_btn)
+        
+        # Legacy subtitle settings button
+        self.legacy_settings_btn = QPushButton("⚙ Legacy Settings")
+        self.legacy_settings_btn.clicked.connect(self.show_subtitle_settings)
+        controls_layout.addWidget(self.legacy_settings_btn)
         
         controls_layout.addStretch()
         
@@ -284,6 +409,122 @@ class VideoPlayer(QMainWindow):
         layout.addLayout(controls_layout)
         
         return panel
+    
+    def create_subtitle_window(self):
+        """Create a transparent floating window for subtitles"""
+        self.subtitle_window = QWidget()
+        self.subtitle_window.setWindowTitle("Subtitles")
+        self.subtitle_window.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint |
+            Qt.WindowType.Tool
+        )
+        self.subtitle_window.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.subtitle_window.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.subtitle_window.setStyleSheet("background: transparent;")
+        
+        # Create layout for the overlay
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        self.subtitle_window.setLayout(layout)
+        
+        # Add subtitle label - it will handle its own rendering
+        self.subtitle_overlay = SubtitleOverlay()
+        self.subtitle_overlay.setStyleSheet("background: transparent;")
+        self.subtitle_overlay.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding
+        )
+        self.subtitle_overlay.setMinimumSize(10, 10)
+        layout.addWidget(self.subtitle_overlay)
+        
+        # Show window and align with video frame
+        self.subtitle_window.show()
+        self.update_subtitle_window_geometry()
+        QTimer.singleShot(0, self.update_subtitle_window_geometry)
+
+    def _autoplay_sample_video(self):
+        """Load and cast the bundled sample video on startup for quick validation."""
+        if os.getenv("SUBTITLEPLAYER_DISABLE_SAMPLE_AUTOPLAY") == "1":
+            return
+
+        if self._sample_autoplayed or self.current_video:
+            return
+
+        sample_path = SAMPLE_VIDEO_PATH
+        if not sample_path.exists():
+            print(f"[Startup] Sample video not found at {sample_path}")
+            return
+
+        self._sample_autoplayed = True
+
+        try:
+            self.load_video(str(sample_path), loop=True)
+            self._remove_sample_from_recents(str(sample_path))
+
+            if not self.media_player.is_playing():
+                self.play_pause()
+        except Exception as exc:  # pylint: disable=broad-except
+            print(f"[Startup] Failed to load sample video: {exc}")
+            return
+
+        self.statusBar().showMessage("Sample video ready. Load your own file anytime.", 5000)
+        self._start_sample_casting()
+
+    def _remove_sample_from_recents(self, sample_path: str):
+        """Avoid persisting the bundled sample in the user's recent files list."""
+        try:
+            self.config_manager.remove_recent_file(sample_path)
+        except AttributeError:
+            try:
+                if sample_path in getattr(self.config_manager, "recent_files", []):
+                    self.config_manager.recent_files.remove(sample_path)
+                    self.config_manager.save_recent_files()
+            except Exception:  # pylint: disable=broad-except
+                pass
+
+    def _start_sample_casting(self):
+        """Begin HTTP casting for the auto-loaded sample video."""
+        if self.casting_manager.is_casting:
+            return
+
+        if not self.current_video:
+            return
+
+        media = self.instance.media_new(self.current_video)
+
+        host_ip = self._resolve_host_ip()
+        config = CastingConfig(host="0.0.0.0", port=8080)
+
+        try:
+            url = self.casting_manager.start_http_stream(media, config, loop=True)
+        except CastingError as exc:
+            print(f"[Startup] Unable to start sample casting: {exc}")
+            return
+
+        resolved_url = url.replace("0.0.0.0", host_ip) if host_ip != "0.0.0.0" else url
+
+        if hasattr(self, "cast_status_label"):
+            self.cast_status_label.setText(f"Cast: {resolved_url}")
+
+        try:
+            SAMPLE_CAST_URL_FILE.write_text(resolved_url)
+            SAMPLE_CAST_LOG_FILE.write_text(f"Sample casting active at {resolved_url}\n")
+        except Exception as exc:  # pylint: disable=broad-except
+            print(f"[Startup] Warning: could not persist cast URL: {exc}")
+
+        print(f"[Startup] Sample casting ready at {resolved_url}", flush=True)
+        self.statusBar().showMessage(f"Sample stream ready at {resolved_url}", 5000)
+
+    @staticmethod
+    def _resolve_host_ip() -> str:
+        """Determine a reachable local IP address for remote clients."""
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as conn:
+                conn.connect(("8.8.8.8", 80))
+                return conn.getsockname()[0]
+        except OSError:
+            return "0.0.0.0"
     
     def create_menu_bar(self):
         """Create menu bar"""
@@ -350,6 +591,17 @@ class VideoPlayer(QMainWindow):
         ai_gen_action.setShortcut("Ctrl+G")
         ai_gen_action.triggered.connect(self.show_ai_subtitle_generator)
         subtitle_menu.addAction(ai_gen_action)
+
+        # Cast menu
+        cast_menu = menubar.addMenu("Cast")
+
+        start_cast_action = QAction("Start HTTP Cast", self)
+        start_cast_action.triggered.connect(self.start_network_cast)
+        cast_menu.addAction(start_cast_action)
+
+        stop_cast_action = QAction("Stop Cast", self)
+        stop_cast_action.triggered.connect(self.stop_network_cast)
+        cast_menu.addAction(stop_cast_action)
         
         # Help menu
         help_menu = menubar.addMenu("Help")
@@ -449,9 +701,15 @@ class VideoPlayer(QMainWindow):
         if file_path:
             self.load_video(file_path)
     
-    def load_video(self, file_path: str):
+    def load_video(self, file_path: str, *, loop: bool = False):
         """Load and play video file"""
         self.current_video = file_path
+
+        if self.casting_manager.is_casting:
+            self.casting_manager.stop()
+            if hasattr(self, "cast_status_label"):
+                self.cast_status_label.clear()
+            self.statusBar().showMessage("Casting stopped for new video", 3000)
         
         # Add to recent files
         self.config_manager.add_recent_file(file_path)
@@ -459,6 +717,8 @@ class VideoPlayer(QMainWindow):
         
         # Load video
         media = self.instance.media_new(file_path)
+        if loop:
+            media.add_option(":input-repeat=-1")
         self.media_player.set_media(media)
         
         # Enable controls
@@ -470,7 +730,7 @@ class VideoPlayer(QMainWindow):
         # Try to auto-load subtitle
         subtitle_file = self.config_manager.get_subtitle_file_for_video(file_path)
         if subtitle_file and os.path.exists(subtitle_file):
-            print(f"Loading previously associated subtitle: {os.path.basename(subtitle_file)}")
+            print(f"[Subtitle] Loading saved association: {os.path.basename(subtitle_file)}")
             self.load_subtitle(subtitle_file)
         else:
             # Check for subtitle file in same directory with multiple patterns
@@ -496,7 +756,7 @@ class VideoPlayer(QMainWindow):
                 for pattern in patterns:
                     sub_path = pattern(ext)
                     if sub_path.exists():
-                        print(f"Auto-detected subtitle: {sub_path.name}")
+                        print(f"[Subtitle] Auto-detected: {sub_path.name}")
                         self.load_subtitle(str(sub_path))
                         break
                 else:
@@ -630,18 +890,22 @@ class VideoPlayer(QMainWindow):
         media_pos = int(self.media_player.get_position() * 1000)
         self.position_slider.setValue(media_pos)
         
-        # Update time labels
-        current_time = self.media_player.get_time() // 1000  # milliseconds to seconds
-        duration = self.media_player.get_length() // 1000
+        # Update time labels (convert milliseconds to seconds)
+        current_time_ms = self.media_player.get_time()  # milliseconds
+        duration_ms = self.media_player.get_length()  # milliseconds
         
-        self.time_label.setText(self.format_time(current_time))
-        self.duration_label.setText(self.format_time(duration))
+        current_time_sec = current_time_ms // 1000  # for display
+        duration_sec = duration_ms // 1000  # for display
         
-        # Update subtitles
-        if self.current_subtitles:
+        self.time_label.setText(self.format_time(current_time_sec))
+        self.duration_label.setText(self.format_time(duration_sec))
+        
+        # Update subtitles (need time in seconds with decimal)
+        if self.current_subtitles and current_time_ms >= 0:
+            current_time_float = current_time_ms / 1000.0  # Convert to seconds with decimal
             subtitle_text = self.subtitle_parser.get_subtitle_at_time(
                 self.current_subtitles,
-                current_time / 1000.0  # Convert to seconds with decimal
+                current_time_float
             )
             self.subtitle_overlay.set_subtitle(subtitle_text or "")
     
@@ -711,6 +975,15 @@ class VideoPlayer(QMainWindow):
         
         menu.addSeparator()
         
+        # Settings shortcuts
+        sidebar_action = menu.addAction("🛠 Sidebar Settings")
+        sidebar_action.triggered.connect(self.ensure_sidebar_visible)
+
+        legacy_action = menu.addAction("⚙ Legacy Settings Dialog")
+        legacy_action.triggered.connect(self.show_subtitle_settings)
+
+        menu.addSeparator()
+
         # Fullscreen
         if self.isFullScreen():
             fullscreen_action = menu.addAction("⊡ Exit Fullscreen")
@@ -720,6 +993,42 @@ class VideoPlayer(QMainWindow):
         
         menu.addSeparator()
         
+        # Audio controls
+        volume_up_action = menu.addAction("🔊 Volume +10%")
+        volume_up_action.triggered.connect(lambda: self.adjust_volume(10))
+
+        volume_down_action = menu.addAction("🔉 Volume -10%")
+        volume_down_action.triggered.connect(lambda: self.adjust_volume(-10))
+
+        mute_action = menu.addAction("🔇 Toggle Mute")
+        mute_action.triggered.connect(self.toggle_mute)
+
+        menu.addSeparator()
+
+        # Playback speed controls
+        faster_action = menu.addAction("⏩ Speed +0.25x")
+        faster_action.triggered.connect(lambda: self.adjust_playback_speed(0.25))
+
+        slower_action = menu.addAction("⏪ Speed -0.25x")
+        slower_action.triggered.connect(lambda: self.adjust_playback_speed(-0.25))
+
+        reset_speed_action = menu.addAction("⏯ Reset Speed (1.0x)")
+        reset_speed_action.triggered.connect(self.reset_playback_speed)
+
+        menu.addSeparator()
+
+        # Casting controls
+        if self.casting_manager.is_casting:
+            stop_cast_action = menu.addAction("🛑 Stop Network Cast")
+            stop_cast_action.triggered.connect(self.stop_network_cast)
+            url = self.casting_manager.url or "(unknown)"
+            url_action = menu.addAction(f"🔗 {url}")
+            url_action.setEnabled(False)
+        else:
+            start_cast_action = menu.addAction("🛰 Start Network Cast")
+            start_cast_action.setEnabled(self.current_video is not None)
+            start_cast_action.triggered.connect(self.start_network_cast)
+
         # Subtitle actions
         load_sub_action = menu.addAction("📄 Load Subtitle File")
         load_sub_action.triggered.connect(self.open_subtitle)
@@ -740,6 +1049,114 @@ class VideoPlayer(QMainWindow):
         
         # Show menu at cursor position
         menu.exec(self.video_frame.mapToGlobal(position))
+
+    def ensure_sidebar_visible(self):
+        """Ensure the sidebar is visible without toggling off inadvertently"""
+        if not self.sidebar_visible:
+            self.toggle_subtitle_sidebar()
+        else:
+            self.sidebar_container.show()
+            self.subtitle_sidebar.show()
+            self.toggle_sidebar_btn.setText("⬅ Hide Settings")
+        self.update_subtitle_window_geometry()
+
+    def adjust_volume(self, delta):
+        """Adjust master volume by delta percent"""
+        current_volume = self.media_player.audio_get_volume()
+        if current_volume == -1:
+            current_volume = self.volume_slider.value()
+        new_volume = max(0, min(100, current_volume + delta))
+        self.volume_slider.setValue(new_volume)
+        self.set_volume(new_volume)
+        self.statusBar().showMessage(f"Volume set to {new_volume}%", 2000)
+
+    def toggle_mute(self):
+        """Toggle audio mute state"""
+        muted = self.media_player.audio_get_mute()
+        self.media_player.audio_set_mute(not muted)
+        self.statusBar().showMessage("Audio muted" if not muted else "Audio unmuted", 2000)
+
+    def adjust_playback_speed(self, delta):
+        """Adjust playback speed by delta"""
+        new_rate = max(0.25, min(4.0, self.playback_rate + delta))
+        if abs(new_rate - self.playback_rate) < 1e-3:
+            return
+        if self.media_player.set_rate(new_rate) == 0:
+            self.playback_rate = new_rate
+            self.statusBar().showMessage(f"Playback speed: {self.playback_rate:.2f}x", 2000)
+        else:
+            self.statusBar().showMessage("Unable to change playback speed", 2000)
+
+    def reset_playback_speed(self):
+        """Reset playback speed to normal"""
+        if self.media_player.set_rate(1.0) == 0:
+            self.playback_rate = 1.0
+            self.statusBar().showMessage("Playback speed reset to 1.00x", 2000)
+
+    def start_network_cast(self):
+        """Start casting the current media over HTTP."""
+        if not self.current_video:
+            QMessageBox.information(
+                self,
+                "No Video",
+                "Load a video before starting a casting session."
+            )
+            return
+
+        if self.casting_manager.is_casting:
+            QMessageBox.information(
+                self,
+                "Casting Already Active",
+                f"Streaming is already active at:\n{self.casting_manager.url}"
+            )
+            return
+
+        media = None
+        if self.current_video and os.path.exists(self.current_video):
+            media = self.instance.media_new(self.current_video)
+        else:
+            media = self.media_player.get_media()
+            if media is None and self.current_video:
+                media = self.instance.media_new(self.current_video)
+
+        try:
+            host_ip = self._resolve_host_ip()
+            config = CastingConfig(host="0.0.0.0", port=8080)
+            url = self.casting_manager.start_http_stream(media, config)
+            resolved_url = url.replace("0.0.0.0", host_ip) if host_ip != "0.0.0.0" else url
+        except CastingError as exc:
+            QMessageBox.critical(
+                self,
+                "Casting Failed",
+                f"Unable to start network casting.\n\n{exc}"
+            )
+            return
+
+        if hasattr(self, "cast_status_label"):
+            self.cast_status_label.setText(f"Cast: {resolved_url}")
+        self.statusBar().showMessage(f"Casting started: {resolved_url}", 5000)
+        QMessageBox.information(
+            self,
+            "Casting Started",
+            "Streaming started successfully.\n\n"
+            f"Access it from another device using this URL:\n{resolved_url}"
+        )
+
+    def stop_network_cast(self):
+        """Stop the active casting session."""
+        if not self.casting_manager.is_casting:
+            self.statusBar().showMessage("No active casting session", 2000)
+            return
+
+        self.casting_manager.stop()
+        if hasattr(self, "cast_status_label"):
+            self.cast_status_label.clear()
+        self.statusBar().showMessage("Casting stopped", 3000)
+        QMessageBox.information(
+            self,
+            "Casting Stopped",
+            "Network casting has been stopped."
+        )
     
     def show_subtitle_search(self):
         """Show subtitle search dialog"""
@@ -756,41 +1173,77 @@ class VideoPlayer(QMainWindow):
             if subtitle_path:
                 self.load_subtitle(subtitle_path)
     
+    def toggle_subtitle_sidebar(self):
+        """Toggle the visibility of the subtitle settings sidebar"""
+        self.sidebar_visible = not self.sidebar_visible
+        if self.sidebar_visible:
+            self.sidebar_container.show()
+            self.subtitle_sidebar.show()
+            sidebar_width = max(320, int(self.width() * 0.28))
+            self.splitter.setSizes([max(1, self.width() - sidebar_width), sidebar_width])
+            self.toggle_sidebar_btn.setText("⬅ Hide Settings")
+            if self.subtitle_settings_dialog and self.subtitle_settings_dialog.isVisible():
+                self.subtitle_settings_dialog.reject()
+        else:
+            self.sidebar_container.hide()
+            self.subtitle_sidebar.hide()
+            self.splitter.setSizes([self.width(), 0])
+            self.toggle_sidebar_btn.setText("⚙ Settings Sidebar")
+        self.update_subtitle_window_geometry()
+    
+    def on_sidebar_settings_changed(self, style):
+        """Handle changes from subtitle settings sidebar"""
+        self.subtitle_style = style
+        self.subtitle_overlay.set_style(self.subtitle_style)
+    
     def show_subtitle_settings(self):
         """Show subtitle settings dialog"""
         # Import here to avoid circular dependency
         from subtitle_settings_dialog import SubtitleSettingsDialog
         
+        if self.sidebar_visible:
+            self.sidebar_visible = False
+            self.sidebar_container.hide()
+            self.subtitle_sidebar.hide()
+            self.splitter.setSizes([self.width(), 0])
+            self.toggle_sidebar_btn.setText("⚙ Settings Sidebar")
+
         # Get current subtitle file path
         subtitle_path = None
         if self.current_video:
             subtitle_path = self.config_manager.get_subtitle_file_for_video(self.current_video)
         
         dialog = SubtitleSettingsDialog(
-            self.subtitle_style, 
+            self.subtitle_style,
             self,
             subtitles=self.current_subtitles,
             current_time_func=lambda: self.media_player.get_time() / 1000.0,
             video_path=self.current_video,
             subtitle_path=subtitle_path
         )
-        if dialog.exec():
-            self.subtitle_style = dialog.get_style()
-            self.subtitle_overlay.set_style(self.subtitle_style)
+        dialog.toggle_sidebar_requested.connect(self.toggle_subtitle_sidebar)
+        self.subtitle_settings_dialog = dialog
+
+        try:
+            if dialog.exec():
+                self.subtitle_style = dialog.get_style()
+                self.subtitle_overlay.set_style(self.subtitle_style)
             
-            # Re-apply timing offset
-            if self.current_subtitles:
-                base_subtitles = self.subtitle_parser.parse_file(
-                    self.config_manager.get_subtitle_file_for_video(self.current_video)
-                )
-                self.current_subtitles = self.subtitle_parser.adjust_timing(
-                    base_subtitles,
-                    self.subtitle_style.timing_offset
-                )
-            
-            # Save style
-            if self.current_video:
-                self.config_manager.save_subtitle_style(self.subtitle_style, self.current_video)
+                # Re-apply timing offset
+                if self.current_subtitles:
+                    base_subtitles = self.subtitle_parser.parse_file(
+                        self.config_manager.get_subtitle_file_for_video(self.current_video)
+                    )
+                    self.current_subtitles = self.subtitle_parser.adjust_timing(
+                        base_subtitles,
+                        self.subtitle_style.timing_offset
+                    )
+                
+                # Save style
+                if self.current_video:
+                    self.config_manager.save_subtitle_style(self.subtitle_style, self.current_video)
+        finally:
+            self._clear_subtitle_dialog_reference()
     
     def show_ai_subtitle_generator(self):
         """Show AI subtitle generation dialog"""
@@ -843,17 +1296,50 @@ class VideoPlayer(QMainWindow):
             "</ul>"
             "<p>© 2025 SubtitlePlayer Project</p>"
         )
+
+    def _clear_subtitle_dialog_reference(self):
+        """Reset legacy dialog reference when it closes"""
+        self.subtitle_settings_dialog = None
+
+    def update_subtitle_window_geometry(self):
+        """Synchronize subtitle overlay window with the video frame"""
+        if not hasattr(self, 'subtitle_window') or not hasattr(self, 'video_frame'):
+            return
+
+        video_rect = self.video_frame.rect()
+        global_pos = self.video_frame.mapToGlobal(QPoint(0, 0))
+
+        self.subtitle_window.setGeometry(
+            global_pos.x(),
+            global_pos.y(),
+            video_rect.width(),
+            video_rect.height()
+        )
+        self.subtitle_window.raise_()
+
+        if hasattr(self, 'subtitle_overlay'):
+            self.subtitle_overlay.updateGeometry()
+            self.subtitle_overlay.update()
     
     def resizeEvent(self, event):
         """Handle window resize"""
         super().resizeEvent(event)
-        # Resize subtitle overlay to match video frame
-        self.subtitle_overlay.setGeometry(self.video_frame.rect())
+        self.update_subtitle_window_geometry()
+    
+    def moveEvent(self, event):
+        """Handle window move - keep subtitle window synchronized"""
+        super().moveEvent(event)
+        self.update_subtitle_window_geometry()
     
     def closeEvent(self, event):
         """Handle window close"""
         self.media_player.stop()
         self.timer.stop()
+        # Close subtitle window if it exists
+        if hasattr(self, 'subtitle_window'):
+            self.subtitle_window.close()
+        if hasattr(self, 'casting_manager'):
+            self.casting_manager.cleanup()
         event.accept()
 
 

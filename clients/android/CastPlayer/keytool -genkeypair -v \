@@ -1,0 +1,4 @@
+keytool -genkeypair -v \
+  -keystore /secure/location/subtitleplayer-release.jks \
+  -alias subtitleplayer \
+  -keyalg RSA -keysize 2048 -validity 3650

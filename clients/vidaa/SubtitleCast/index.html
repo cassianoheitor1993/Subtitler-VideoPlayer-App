@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Subtitle Cast TV</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script defer src="app.js"></script>
+</head>
+<body>
+    <main>
+        <h1>Subtitle Cast</h1>
+        <section class="status">
+            <label for="streamUrl">Stream URL</label>
+            <input id="streamUrl" type="text" value="http://10.0.0.59:8080/live.ts" />
+            <div class="buttons">
+                <button id="playBtn">Play (OK)</button>
+                <button id="stopBtn">Stop (Back)</button>
+            </div>
+            <p id="message">Ready</p>
+        </section>
+        <section class="player">
+            <video id="player" preload="auto" controls></video>
+        </section>
+    </main>
+</body>
+</html>

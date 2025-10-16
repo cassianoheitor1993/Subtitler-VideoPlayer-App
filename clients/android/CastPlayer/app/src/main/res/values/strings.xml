@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">Subtitle Cast</string>
+    <string name="stream_url_hint">http://10.0.0.59:8080/live.ts</string>
+    <string name="play_button">Play</string>
+    <string name="stop_button">Stop</string>
+    <string name="status_ready">Ready</string>
+    <string name="status_playing">Playing</string>
+    <string name="status_stopped">Stopped</string>
+</resources>

@@ -119,6 +119,12 @@ class ConfigManager:
         self.recent_files = self.recent_files[:limit]
         
         self.save_recent_files()
+
+    def remove_recent_file(self, filepath: str):
+        """Remove a file from the recent files list if present."""
+        if filepath in self.recent_files:
+            self.recent_files.remove(filepath)
+            self.save_recent_files()
     
     def get_video_metadata_file(self, video_path: str) -> Path:
         """Get metadata file path for a video"""

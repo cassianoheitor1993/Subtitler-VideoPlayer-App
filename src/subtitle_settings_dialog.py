@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
     QColorDialog, QFontComboBox, QGridLayout, QScrollArea, QWidget,
     QSizePolicy, QProgressBar, QMessageBox
 )
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtCore import Qt, QSize, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QResizeEvent
 
 from config_manager import SubtitleStyle
@@ -54,6 +54,7 @@ class ColorButton(QPushButton):
 
 class SubtitleSettingsDialog(QDialog):
     """Dialog for configuring subtitle appearance"""
+    toggle_sidebar_requested = pyqtSignal()
     
     def __init__(self, current_style: SubtitleStyle, parent=None, subtitles=None, current_time_func=None, video_path=None, subtitle_path=None):
         super().__init__(parent)
@@ -66,6 +67,11 @@ class SubtitleSettingsDialog(QDialog):
         self.init_ui()
         self.load_settings()
     
+    def switch_to_sidebar(self):
+        """Close dialog and request sidebar view"""
+        self.toggle_sidebar_requested.emit()
+        self.reject()
+
     def init_ui(self):
         """Initialize user interface"""
         self.setWindowTitle("Subtitle Settings")
@@ -77,6 +83,18 @@ class SubtitleSettingsDialog(QDialog):
         main_layout = QVBoxLayout()
         self.setLayout(main_layout)
         
+        # Header with toggle button
+        header_layout = QHBoxLayout()
+        header_title = QLabel("Legacy Subtitle Settings")
+        header_title.setStyleSheet("font-size: 18px; font-weight: bold;")
+        header_layout.addWidget(header_title)
+        header_layout.addStretch()
+        self.sidebar_toggle_btn = QPushButton("Sidebar View")
+        self.sidebar_toggle_btn.setObjectName("SidebarToggleButton")
+        self.sidebar_toggle_btn.clicked.connect(self.switch_to_sidebar)
+        header_layout.addWidget(self.sidebar_toggle_btn)
+        main_layout.addLayout(header_layout)
+
         # Scroll area for content
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -454,6 +472,15 @@ class SubtitleSettingsDialog(QDialog):
             }
             QPushButton:hover {
                 background-color: #1177bb;
+            }
+            QPushButton#SidebarToggleButton {
+                background-color: transparent;
+                color: #9ec0ff;
+                border: 1px solid #1f4a8c;
+                padding: 6px 14px;
+            }
+            QPushButton#SidebarToggleButton:hover {
+                background-color: rgba(30, 90, 160, 0.35);
             }
         """)
     
