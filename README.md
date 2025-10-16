@@ -1,207 +1,287 @@
 # SubtitlePlayer
 
-A professional video player for Linux with native subtitle download support through OpenSubtitles.com API.
+A professional, feature-rich video player for Linux with intelligent subtitle management, AI-powered subtitle generation, and network streaming capabilities.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
+![Platform](https://img.shields.io/badge/platform-Linux-lightgrey.svg)
+![VLC](https://img.shields.io/badge/VLC-Required-orange.svg)
 
-## Features
+## ✨ Key Features
 
-- 🎬 **Multi-format Video Support**: Play .mp4, .avi, .mkv, .mov, .flv, .wmv, .m4v, .webm, and more
-- 📥 **Native Subtitle Download**: Search and download subtitles directly from OpenSubtitles.com
-- 🎨 **Customizable Subtitle Styling**: 
-  - Font family, size, bold, italic
-  - Text color, stroke color, and width
-  - Background color and transparency
-  - Position (top/center/bottom, left/center/right)
-  - Timing offset adjustment
-- 🎯 **Live Timing Preview**: See exactly which subtitle appears at your adjusted timing offset in real-time
-- 🌍 **Multi-language Translation**: Translate subtitles to 18+ languages including English, Portuguese, Spanish, Chinese, French, German, and more
-  - 📊 **Visual Progress Bar**: Real-time translation progress with percentage completion
-  - ❌ **Cancel Anytime**: Stop translation at any point with cancel button
-  - 💾 **File-based Translation**: Saves translated subtitles as new files (e.g., movie.pt-BR.srt)
-- 🤖 **AI Subtitle Generation**: Generate subtitles using Whisper AI for videos without subtitles (99+ languages)
-- 💾 **Smart Metadata Management**: Saves subtitle preferences per video
-- 🌙 **Modern Dark Theme**: Professional, eye-friendly interface
-- ⌨️ **Keyboard Shortcuts**: Quick access to common functions (ESC, F, Space, etc.)
-- 📂 **Recent Files**: Easy access to previously played videos
-- 🎯 **Auto-load Subtitles**: Automatically finds and loads subtitle files
-- 🖱️ **Interactive Timeline**: Click to seek, double-click for fullscreen
-- 📱 **Right-click Context Menu**: Quick access to common actions
-- 🛰️ **Local Network Casting (Beta)**: Stream the active video over HTTP to other devices on your LAN
+### 🎬 Video Playback
+- **Multi-format Support**: MP4, AVI, MKV, MOV, FLV, WMV, M4V, WebM, and more
+- **Hardware Acceleration**: Leverages VLC's powerful playback engine
+- **Interactive Timeline**: Click to seek, smooth playback controls
+- **Recent Files**: Quick access to previously watched videos
 
-## Screenshots
+### � Subtitle Management
+- **Native Subtitle Download**: Search and download subtitles directly from OpenSubtitles.com
+- **Auto-load Subtitles**: Automatically finds and loads subtitle files in the same directory
+- **Smart Metadata**: Remembers subtitle preferences per video
 
-### Main Player Interface
-- Clean, modern video player with playback controls
-- Real-time subtitle display with customizable styling
-- Timeline with precise time display
+### 🎨 Customizable Styling
+- **Typography**: Font family, size, bold, italic
+- **Colors**: Text color, stroke color and width, semi-transparent backgrounds
+- **Position**: Top/center/bottom, left/center/right alignment
+- **Margins**: Adjustable vertical and horizontal spacing
+- **Live Preview**: See changes instantly while watching
+- **Per-Video Settings**: Saves your preferences for each video
 
-### Subtitle Search Dialog
-- Search OpenSubtitles.com by video hash or movie name
-- Filter by language
-- View subtitle details (downloads, ratings, format)
-- One-click download to video directory
+### 🤖 AI Subtitle Generation
+- **Whisper AI Integration**: Generate subtitles for videos without them
+- **99+ Languages**: Support for virtually any language
+- **Automatic Detection**: Language auto-detection capability
+- **High Accuracy**: State-of-the-art transcription quality
 
-### Subtitle Settings
-- Comprehensive styling options
-- Live preview of changes
-- Save preferences per video
+### 🌍 Translation System
+- **18+ Languages**: English, Portuguese, Spanish, Chinese, French, German, and more
+- **File-based**: Creates new subtitle files (e.g., `movie.pt-BR.srt`)
+- **Progress Visualization**: Real-time progress bar with percentage
+- **Cancelable**: Stop translation at any time
+- **Batch Processing**: Translate entire subtitle files efficiently
 
-## Requirements
+### 🛰️ Network Streaming (Beta)
+- **HLS Streaming**: Cast video + subtitles to other devices
+- **Cross-platform**: Works with Android, iOS, browsers, smart TVs
+- **1080p Quality**: H.264 High Profile with AAC audio
+- **Subtitle Burn-in**: Optional subtitle embedding in stream
+- **Low Latency**: Configurable segment duration for responsiveness
 
-- **Operating System**: Linux (Ubuntu, Linux Mint, Debian, Fedora, etc.)
-- **Python**: 3.8 or higher
-- **VLC**: VLC media player must be installed
+### ⌨️ Keyboard Shortcuts
+- **ESC**: Exit fullscreen
+- **F**: Toggle fullscreen
+- **Space**: Play/pause
+- **←/→**: Seek backward/forward
+- **↑/↓**: Volume up/down
+- **S**: Open subtitle search
+- **O**: Open video file
 
-## Installation
+## 📚 Documentation
 
-### 1. Install System Dependencies
+Comprehensive documentation is available in the [`docs/`](docs/) directory:
 
-#### Ubuntu/Debian/Linux Mint:
+- **[Getting Started](docs/guides/QUICKSTART.md)** - Quick installation and usage guide
+- **[Features Documentation](docs/features/)** - Detailed feature explanations
+- **[Development Guide](docs/development/)** - For contributors and developers
+- **[Deployment](docs/deployment/)** - Publishing and distribution
+- **[User Guides](docs/guides/)** - AI subtitles, API setup, and more
+
+## 🚀 Quick Start
+
+### Prerequisites
+- **OS**: Linux (Ubuntu, Fedora, Arch, etc.)
+- **Python**: 3.8+
+- **VLC**: VLC media player installed
+
+### Installation
+
 ```bash
+# Install system dependencies (Ubuntu/Debian)
 sudo apt update
 sudo apt install python3 python3-pip python3-venv vlc libvlc-dev
-```
 
-#### Fedora:
-```bash
-sudo dnf install python3 python3-pip vlc vlc-devel
-```
-
-#### Arch Linux:
-```bash
-sudo pacman -S python python-pip vlc
-```
-
-### 2. Clone or Download the Project
-
-```bash
-cd ~/Documents
-git clone <repository-url> SubtitlePlayer
+# Clone the repository
+git clone https://github.com/cassianoheitor1993/Subtitler-VideoPlayer-App.git SubtitlePlayer
 cd SubtitlePlayer
+
+# Run the automated setup
+./run.sh
 ```
 
-Or download and extract the ZIP file to your desired location.
+The `run.sh` script will:
+1. Create a virtual environment
+2. Install all Python dependencies
+3. Launch the application
 
-### 3. Create Virtual Environment
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
-```
-
-### 4. Install Python Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 5. Get OpenSubtitles API Key
+### Get OpenSubtitles API Key
 
 1. Go to [https://www.opensubtitles.com](https://www.opensubtitles.com)
 2. Create a free account
 3. Go to [https://www.opensubtitles.com/api](https://www.opensubtitles.com/api)
 4. Generate your free API key
-5. Save it - you'll need it when searching for subtitles
+5. Save it - you'll enter it when first searching for subtitles
 
-## Usage
+See [API Key Setup Guide](docs/guides/API_KEY_INFO.md) for detailed instructions.
 
-### Running the Application
+## 📖 Usage
 
-#### From Repository Root (Cassiano-Portfolio)
+### Launching the App
+
 ```bash
-./run-subtitleplayer.sh
-# Optional: verify without launching the GUI
-# ./run-subtitleplayer.sh --dry-run
-```
-
-This helper script delegates to `SubtitlePlayer/run.sh`, automatically creating the
-virtual environment and installing dependencies on first launch.
-
-#### From Terminal:
-```bash
-cd ~/Documents/SubtitlePlayer
-source venv/bin/activate
-python3 main.py
-```
-
-#### Using the Launcher Script:
-```bash
-chmod +x run.sh
+# Simple - just run:
 ./run.sh
+
+# Or use Python directly:
+python3 main.py
 ```
 
 ### Basic Workflow
 
-1. **Open a Video**:
-   - Click "Open Video" button or use `Ctrl+O`
-   - Browse and select your video file
-   - Video starts playing automatically
-
+1. **Open a Video**: File → Open Video (or `Ctrl+O`)
 2. **Load Subtitles**:
-   
-   **Option A - Auto-load**:
-   - If a subtitle file (.srt, .vtt, .ass) with the same name exists in the video directory, it loads automatically
-   
-   **Option B - Manual Load**:
-   - Click "Load Subtitles" or press `Ctrl+S`
-   - Select subtitle file from your computer
-   
-   **Option C - Download from OpenSubtitles**:
-   - Click "Download Subtitles" or press `Ctrl+D`
-   - Enter your API key (first time only)
-   - Subtitles are automatically searched by video hash
-   - Select desired subtitle from results
-   - Click "Download Selected"
-   - Subtitle downloads to video directory and loads automatically
+   - Auto-loads matching `.srt` files from the video directory
+   - **Manual**: File → Load Subtitles (`Ctrl+S`)
+   - **Download**: Subtitle → Download (`Ctrl+D`)
+   - **AI Generate**: Subtitle → Generate with AI
+3. **Customize**: View → Subtitle Settings (modern sidebar or legacy dialog)
+4. **Translate**: Subtitle → Translate Subtitles
+5. **Cast**: Cast → Start HTTP Cast (stream to other devices)
 
-3. **Customize Subtitle Appearance**:
-   - Click "Subtitle Settings"
-   - Adjust font, colors, position, timing
-   - See live preview of changes
-   - Click "Apply" to save
+### Network Casting
 
-4. **Playback Controls**:
-   - **Space**: Play/Pause
-   - **F**: Toggle fullscreen
-   - **Ctrl+O**: Open video
-   - **Ctrl+S**: Load subtitle file
-   - **Ctrl+D**: Download subtitles
-   - **Ctrl+Q**: Quit application
+Cast your video with embedded subtitles to any device on your network:
 
-5. **Start a Local Network Cast**:
-   1. Load a video and let playback begin.
-   2. Open the **Cast** menu (or right-click the video) and choose **Start HTTP Cast**.
-   3. Share the displayed URL (default `http://<your-ip>:8080/`) with another device and open it in VLC, a browser, or the Android CastPlayer client.
-   4. Use **Stop Cast** from the same menu to terminate the stream.
-      - Tip: Cast sessions now transcode to 1080p H.264 (8-bit, High Profile Level 4.1) with stereo AAC audio for broad device compatibility. 4K Dolby Vision sources may take up to 60 seconds before the manifest appears. If a cast fails, check `logs/cast_failures/` for the captured FFmpeg logs and metadata.
+1. Load a video with subtitles
+2. **Cast → Start HTTP Cast**
+3. Share the URL with other devices:
+   - **Android/iOS**: Open in VLC or MX Player
+   - **Browsers**: Works in Chrome, Firefox, Safari
+   - **Smart TVs**: Use the VIDAA client app
+4. **Cast → Stop Cast** to end the stream
 
-## Configuration
+**Technical Details**:
+- Output: 1080p H.264 High Profile (Level 4.1) + AAC stereo
+- Format: HLS (HTTP Live Streaming)
+- Compatibility: All modern devices with HLS support
+- Latency: 2-second segments (configurable)
+- Logs: Check `logs/cast_failures/` if issues occur
+
+See [Streaming Documentation](docs/features/STREAMING_FIX_COMPLETE.md) for advanced configuration.
+
+## 🏗️ Repository Structure
+
+```
+SubtitlePlayer/
+├── README.md                    # This file
+├── LICENSE                      # MIT License
+├── CODE_OF_CONDUCT.md          # Community guidelines
+├── CONTRIBUTING.md             # Contribution guidelines
+│
+├── run.sh                       # Quick launcher script
+├── main.py                      # Application entry point
+├── launch.py                    # Alternative launcher
+│
+├── requirements.txt             # Core dependencies
+├── requirements-full.txt        # All dependencies (including AI)
+│
+├── src/                         # Source code
+│   ├── video_player.py          # Main player window
+│   ├── subtitle_settings_sidebar.py  # Modern sidebar UI
+│   ├── opensubtitles_api.py     # OpenSubtitles API client
+│   ├── subtitle_parser.py       # Subtitle format parser
+│   ├── ffmpeg_casting_manager.py    # HLS streaming manager
+│   ├── hls_http_server.py       # Custom HTTP server for HLS
+│   ├── debug_logger.py          # Streaming analytics
+│   └── ...                      # Additional modules
+│
+├── docs/                        # Documentation
+│   ├── README.md                # Documentation index
+│   ├── guides/                  # User guides
+│   ├── features/                # Feature documentation
+│   ├── development/             # Development docs
+│   └── deployment/              # Publishing guides
+│
+├── tests/                       # Test suites
+│   ├── unit/                    # Unit tests
+│   └── integration/             # Integration tests
+│
+├── scripts/                     # Utility scripts
+│   ├── install.sh               # Installation script
+│   └── push-to-github.sh        # Git helper
+│
+├── tools/                       # Development tools
+│   ├── quick_cast_test.py       # HLS streaming tester
+│   └── verify_installation.py  # Installation verifier
+│
+├── clients/                     # Client applications
+│   ├── android/                 # Android CastPlayer app
+│   └── vidaa/                   # Smart TV client
+│
+├── assets/                      # Icons and resources
+├── config/                      # Configuration files
+├── logs/                        # Application logs
+├── resources/                   # Assets and data files
+└── temp/                        # Temporary files
+```
+
+## 🧪 Testing
+
+```bash
+# Run all tests
+python3 -m pytest
+
+# Run specific test suite
+python3 -m pytest tests/unit/
+
+# With coverage report
+python3 -m pytest --cov=src tests/
+```
+
+See [Testing Guide](docs/development/TESTING_GUIDE.md) for more details.
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) and [Code of Conduct](CODE_OF_CONDUCT.md).
+
+### Quick Contribution Guide
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Make your changes and test thoroughly
+4. Commit with clear messages: `git commit -m "Add amazing feature"`
+5. Push to your fork: `git push origin feature/amazing-feature`
+6. Open a Pull Request
+
+## 📋 Configuration
 
 Configuration files are stored in `~/.subtitleplayer/`:
 
 - `config.json`: Application settings (API key, preferences)
-- `recent_files.json`: List of recent videos
+- `recent_files.json`: Recently played videos
 - `metadata/`: Per-video subtitle preferences
+- `cache/`: Downloaded subtitles cache
 
-## File Structure
+## 🗺️ Roadmap
 
-```
-SubtitlePlayer/
-├── main.py                 # Application entry point
-├── requirements.txt        # Python dependencies
-├── run.sh                 # Launcher script
-├── README.md              # This file
-├── src/
-│   ├── video_player.py           # Main player window
-│   ├── opensubtitles_api.py      # OpenSubtitles API client
-│   ├── subtitle_parser.py        # Subtitle format parser
-│   ├── subtitle_search_dialog.py # Subtitle search UI
-│   ├── subtitle_settings_dialog.py # Settings UI
-│   └── config_manager.py         # Configuration management
-├── assets/                # Icons and resources
-└── resources/             # Additional resources
+- [ ] Playlist support
+- [ ] Picture-in-picture mode
+- [ ] Subtitle synchronization tool
+- [ ] Cloud subtitle storage
+- [ ] Browser extension integration
+- [ ] macOS and Windows support
+
+See [Improvements](docs/development/IMPROVEMENTS.md) for the full roadmap.
+
+## ⚖️ License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- **VLC**: Powerful multimedia framework
+- **OpenSubtitles**: Comprehensive subtitle database
+- **OpenAI Whisper**: State-of-the-art speech recognition
+- **PyQt6**: Modern UI framework
+- **FFmpeg**: Multimedia processing toolkit
+
+## 📞 Support & Contact
+
+- **Issues**: [GitHub Issues](https://github.com/cassianoheitor1993/Subtitler-VideoPlayer-App/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/cassianoheitor1993/Subtitler-VideoPlayer-App/discussions)
+- **Documentation**: [docs/](docs/README.md)
+
+## 🌟 Star History
+
+If you find this project useful, please consider giving it a star! ⭐
+
+---
+
+
+---
+
+**Made with ❤️ for the Linux community**
+
 ```
 
 ## Supported Formats
