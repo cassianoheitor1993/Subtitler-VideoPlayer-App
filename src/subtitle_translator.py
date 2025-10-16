@@ -51,30 +51,31 @@ class SubtitleTranslator:
         self.backend = None
         self.cache = {}  # Translation cache for performance
         
-        # Try googletrans first
+        # Try deep-translator first (most reliable)
         try:
-            from googletrans import Translator
-            self.translator = Translator()
-            self.backend = "googletrans"
-            logger.info("Using googletrans for translation")
+            from deep_translator import GoogleTranslator
+            self.translator = GoogleTranslator
+            self.backend = "deep-translator"
+            logger.info("Using deep-translator for translation (recommended)")
         except ImportError:
             pass
         
-        # Try deep-translator as fallback
+        # Try googletrans as fallback (deprecated/unreliable)
         if not self.translator:
             try:
-                from deep_translator import GoogleTranslator
-                self.translator = GoogleTranslator
-                self.backend = "deep-translator"
-                logger.info("Using deep-translator for translation")
+                from googletrans import Translator
+                self.translator = Translator()
+                self.backend = "googletrans"
+                logger.warning("Using googletrans (deprecated, may not work). Consider installing deep-translator instead.")
             except ImportError:
                 pass
         
         if not self.translator:
             raise ImportError(
-                "No translation library available. Install one of:\n"
-                "  pip install googletrans==4.0.0rc1\n"
-                "  pip install deep-translator"
+                "No translation library available. Install:\n"
+                "  pip install deep-translator\n\n"
+                "Alternative (deprecated):\n"
+                "  pip install googletrans==4.0.0rc1"
             )
     
     def translate_subtitles(
