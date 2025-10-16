@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Subtitle Cast</string>
+    <string name="app_name">StreamCast</string>
     <string name="stream_url_hint">http://10.0.0.59:8080/stream.m3u8</string>
     <string name="play_button">Play</string>
     <string name="stop_button">Stop</string>
@@ -8,4 +8,30 @@
     <string name="status_playing">Playing</string>
     <string name="status_stopped">Stopped</string>
     <string name="status_error">Playback error: %1$s</string>
+    
+    <!-- Media Controls -->
+    <string name="pause">Pause</string>
+    <string name="play">Play</string>
+    <string name="forward">Forward</string>
+    <string name="rewind">Rewind</string>
+    <string name="fullscreen">Fullscreen</string>
+    <string name="exit_fullscreen">Exit Fullscreen</string>
+    
+    <!-- Subtitle Settings -->
+    <string name="subtitles_settings">Subtitle Settings</string>
+    <string name="subtitles_on">Subtitles On</string>
+    <string name="subtitles_off">Subtitles Off</string>
+    <string name="subtitle_language">Subtitle Language</string>
+    <string name="no_subtitles">No Subtitles Available</string>
+    
+    <!-- Audio Track -->
+    <string name="audio_track">Audio Track</string>
+    <string name="audio_track_selection">Select Audio Track</string>
+    <string name="no_audio_tracks">No Audio Tracks Available</string>
+    
+    <!-- Buffering -->
+    <string name="buffering">Buffering…</string>
+    
+    <!-- Time format -->
+    <string name="time_format">%02d:%02d</string>
 </resources>
