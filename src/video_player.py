@@ -23,7 +23,9 @@ warnings.filterwarnings('ignore')
 
 from subtitle_parser import SubtitleParser, SubtitleEntry
 from config_manager import ConfigManager, SubtitleStyle
-from casting_manager import CastingManager, CastingError, CastingConfig
+from ffmpeg_casting_manager import FFmpegCastingManager, FFmpegCastingError, FFmpegCastingConfig
+from streaming_stats_dialog import StreamingStatsDialog
+from debug_logger import debug_logger
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SAMPLE_VIDEO_PATH = PROJECT_ROOT / "temp" / "sample.mp4"
@@ -191,9 +193,11 @@ class VideoPlayer(QMainWindow):
         self.config_manager = ConfigManager()
         self.subtitle_parser = SubtitleParser()
         self.current_video = None
+        self._current_video_source = None
         self.current_subtitles = []
         self.subtitle_style = SubtitleStyle()
         self.subtitle_settings_dialog = None
+        self.streaming_stats_dialog = None
         self.playback_rate = 1.0
         self._sample_autoplayed = False
         
@@ -208,7 +212,9 @@ class VideoPlayer(QMainWindow):
         ]
         self.instance = vlc.Instance(vlc_args)
         self.media_player = self.instance.media_player_new()
-        self.casting_manager = CastingManager(self.instance)
+        self.casting_manager = FFmpegCastingManager()
+        self.start_cast_action = None
+        self.stop_cast_action = None
         
         # Timer for updating UI
         self.timer = QTimer(self)
@@ -458,8 +464,10 @@ class VideoPlayer(QMainWindow):
 
         self._sample_autoplayed = True
 
+        debug_logger.log_sample_autoplay_started(str(sample_path))
+
         try:
-            self.load_video(str(sample_path), loop=True)
+            self.load_video(str(sample_path), loop=True, source="sample_autoplay")
             self._remove_sample_from_recents(str(sample_path))
 
             if not self.media_player.is_playing():
@@ -484,37 +492,42 @@ class VideoPlayer(QMainWindow):
                 pass
 
     def _start_sample_casting(self):
-        """Begin HTTP casting for the auto-loaded sample video."""
+        """Begin FFmpeg HLS casting for the auto-loaded sample video."""
         if self.casting_manager.is_casting:
             return
 
-        if not self.current_video:
+        if not self.current_video or not os.path.exists(self.current_video):
             return
 
-        media = self.instance.media_new(self.current_video)
-
-        host_ip = self._resolve_host_ip()
-        config = CastingConfig(host="0.0.0.0", port=8080)
+        config = FFmpegCastingConfig(host="0.0.0.0", port=8080)
 
         try:
-            url = self.casting_manager.start_http_stream(media, config, loop=True)
-        except CastingError as exc:
+            url = self.casting_manager.start_hls_stream(self.current_video, config)
+        except FFmpegCastingError as exc:
             print(f"[Startup] Unable to start sample casting: {exc}")
+            self._update_cast_menu_actions()
             return
-
-        resolved_url = url.replace("0.0.0.0", host_ip) if host_ip != "0.0.0.0" else url
 
         if hasattr(self, "cast_status_label"):
-            self.cast_status_label.setText(f"Cast: {resolved_url}")
+            self.cast_status_label.setText(f"Cast: {url}")
 
         try:
-            SAMPLE_CAST_URL_FILE.write_text(resolved_url)
-            SAMPLE_CAST_LOG_FILE.write_text(f"Sample casting active at {resolved_url}\n")
+            SAMPLE_CAST_URL_FILE.write_text(url)
+            SAMPLE_CAST_LOG_FILE.write_text(f"Sample casting active at {url}\n")
         except Exception as exc:  # pylint: disable=broad-except
             print(f"[Startup] Warning: could not persist cast URL: {exc}")
 
-        print(f"[Startup] Sample casting ready at {resolved_url}", flush=True)
-        self.statusBar().showMessage(f"Sample stream ready at {resolved_url}", 5000)
+        debug_logger.log_cast_started(
+            self.current_video,
+            source=self._current_video_source or "sample_autoplay",
+            url=url,
+            subtitle_path=None,
+            autoplay=True,
+        )
+
+        print(f"[Startup] Sample HLS casting ready at {url}", flush=True)
+        self.statusBar().showMessage(f"Sample HLS stream ready at {url}", 5000)
+        self._update_cast_menu_actions()
 
     @staticmethod
     def _resolve_host_ip() -> str:
@@ -595,21 +608,53 @@ class VideoPlayer(QMainWindow):
         # Cast menu
         cast_menu = menubar.addMenu("Cast")
 
-        start_cast_action = QAction("Start HTTP Cast", self)
-        start_cast_action.triggered.connect(self.start_network_cast)
-        cast_menu.addAction(start_cast_action)
+        self.start_cast_action = QAction("Start HTTP Cast", self)
+        self.start_cast_action.triggered.connect(self.start_network_cast)
+        cast_menu.addAction(self.start_cast_action)
 
-        stop_cast_action = QAction("Stop Cast", self)
-        stop_cast_action.triggered.connect(self.stop_network_cast)
-        cast_menu.addAction(stop_cast_action)
+        self.stop_cast_action = QAction("Stop Cast", self)
+        self.stop_cast_action.triggered.connect(self.stop_network_cast)
+        cast_menu.addAction(self.stop_cast_action)
         
         # Help menu
         help_menu = menubar.addMenu("Help")
+
+        analytics_action = QAction("Streaming Analytics", self)
+        analytics_action.triggered.connect(self.show_streaming_stats)
+        help_menu.addAction(analytics_action)
         
         about_action = QAction("About", self)
         about_action.triggered.connect(self.show_about)
         help_menu.addAction(about_action)
+
+        self._update_cast_menu_actions()
+
+    def _update_cast_menu_actions(self):
+        """Enable or disable cast menu actions based on state."""
+        casting = self.casting_manager.is_casting
+        can_start = bool(self.current_video and os.path.exists(self.current_video))
+
+        if self.start_cast_action is not None:
+            self.start_cast_action.setEnabled(can_start and not casting)
+        if self.stop_cast_action is not None:
+            self.stop_cast_action.setEnabled(casting)
     
+    def show_streaming_stats(self):
+        """Open the streaming analytics dialog."""
+        if self.streaming_stats_dialog is None:
+            self.streaming_stats_dialog = StreamingStatsDialog(self)
+            self.streaming_stats_dialog.finished.connect(self._on_streaming_stats_closed)
+
+        self.streaming_stats_dialog.refresh()
+        self.streaming_stats_dialog.exec()
+
+    def _on_streaming_stats_closed(self, _result: int) -> None:
+        """Reset the dialog reference after it closes."""
+        if self.streaming_stats_dialog is not None:
+            # Ensure the widget is deleted to release resources.
+            self.streaming_stats_dialog.deleteLater()
+            self.streaming_stats_dialog = None
+
     def update_recent_menu(self):
         """Update recent files menu"""
         self.recent_menu.clear()
@@ -619,7 +664,9 @@ class VideoPlayer(QMainWindow):
                 filename = os.path.basename(filepath)
                 action = QAction(filename, self)
                 action.setData(filepath)
-                action.triggered.connect(lambda checked, path=filepath: self.load_video(path))
+                action.triggered.connect(
+                    lambda checked, path=filepath: self.load_video(path, source="recent_file")
+                )
                 self.recent_menu.addAction(action)
     
     def apply_theme(self):
@@ -701,15 +748,28 @@ class VideoPlayer(QMainWindow):
         if file_path:
             self.load_video(file_path)
     
-    def load_video(self, file_path: str, *, loop: bool = False):
+    def load_video(self, file_path: str, *, loop: bool = False, source: str = "user"):
         """Load and play video file"""
+        previous_video = self.current_video
+        previous_source = getattr(self, "_current_video_source", None)
+
         self.current_video = file_path
+        self._current_video_source = source
+
+        debug_logger.log_video_loaded(file_path, source=source, loop=loop)
 
         if self.casting_manager.is_casting:
+            if previous_video:
+                debug_logger.log_cast_stopped(
+                    previous_video,
+                    source=previous_source,
+                    reason="video_changed",
+                )
             self.casting_manager.stop()
             if hasattr(self, "cast_status_label"):
                 self.cast_status_label.clear()
             self.statusBar().showMessage("Casting stopped for new video", 3000)
+        self._update_cast_menu_actions()
         
         # Add to recent files
         self.config_manager.add_recent_file(file_path)
@@ -772,6 +832,7 @@ class VideoPlayer(QMainWindow):
         self.timer.start()
         
         self.statusBar().showMessage(f"Playing: {os.path.basename(file_path)}")
+        self._update_cast_menu_actions()
     
     def open_subtitle(self):
         """Open subtitle file dialog"""
@@ -808,6 +869,10 @@ class VideoPlayer(QMainWindow):
                 if self.current_video:
                     self.config_manager.set_subtitle_file_for_video(self.current_video, file_path)
                     print(f"✓ Saved subtitle association: {os.path.basename(self.current_video)} → {os.path.basename(file_path)}")
+                    try:
+                        debug_logger.log_subtitle_linked(self.current_video, file_path)
+                    except Exception:  # pylint: disable=broad-except
+                        pass
                 
                 # Update status with subtitle count
                 subtitle_count = len(self.current_subtitles)
@@ -1094,61 +1159,111 @@ class VideoPlayer(QMainWindow):
             self.statusBar().showMessage("Playback speed reset to 1.00x", 2000)
 
     def start_network_cast(self):
-        """Start casting the current media over HTTP."""
+        """Start casting the current media over HTTP using FFmpeg HLS."""
         if not self.current_video:
             QMessageBox.information(
                 self,
                 "No Video",
                 "Load a video before starting a casting session."
             )
-            return
-
-        if self.casting_manager.is_casting:
-            QMessageBox.information(
-                self,
-                "Casting Already Active",
-                f"Streaming is already active at:\n{self.casting_manager.url}"
+            self._update_cast_menu_actions()
+            debug_logger.log_cast_failed(
+                None,
+                source=self._current_video_source,
+                error="no_current_video",
             )
             return
 
-        media = None
-        if self.current_video and os.path.exists(self.current_video):
-            media = self.instance.media_new(self.current_video)
-        else:
-            media = self.media_player.get_media()
-            if media is None and self.current_video:
-                media = self.instance.media_new(self.current_video)
+        if self.casting_manager.is_casting:
+            debug_logger.log_cast_stopped(
+                self.current_video,
+                source=self._current_video_source,
+                reason="restart_requested",
+            )
+            self.casting_manager.stop()
+            if hasattr(self, "cast_status_label"):
+                self.cast_status_label.clear()
+            self.statusBar().showMessage("Restarting cast for current video", 3000)
+        self._update_cast_menu_actions()
+
+        if not os.path.exists(self.current_video):
+            QMessageBox.warning(
+                self,
+                "Video Not Found",
+                f"Video file not found:\n{self.current_video}"
+            )
+            self._update_cast_menu_actions()
+            debug_logger.log_cast_failed(
+                self.current_video,
+                source=self._current_video_source,
+                error="video_missing",
+            )
+            return
+
+        subtitle_path = None
+        if self.current_video:
+            subtitle_path = self.config_manager.get_subtitle_file_for_video(self.current_video)
+            if subtitle_path and not os.path.exists(subtitle_path):
+                print(f"[Casting] Subtitle file missing for cast: {subtitle_path}")
+                subtitle_path = None
 
         try:
-            host_ip = self._resolve_host_ip()
-            config = CastingConfig(host="0.0.0.0", port=8080)
-            url = self.casting_manager.start_http_stream(media, config)
-            resolved_url = url.replace("0.0.0.0", host_ip) if host_ip != "0.0.0.0" else url
-        except CastingError as exc:
+            config = FFmpegCastingConfig(host="0.0.0.0", port=8080)
+            url = self.casting_manager.start_hls_stream(
+                self.current_video,
+                config,
+                subtitle_path=subtitle_path,
+            )
+        except FFmpegCastingError as exc:
+            self._update_cast_menu_actions()
             QMessageBox.critical(
                 self,
                 "Casting Failed",
                 f"Unable to start network casting.\n\n{exc}"
             )
+            debug_logger.log_cast_failed(
+                self.current_video,
+                source=self._current_video_source,
+                error=str(exc),
+            )
             return
 
         if hasattr(self, "cast_status_label"):
-            self.cast_status_label.setText(f"Cast: {resolved_url}")
-        self.statusBar().showMessage(f"Casting started: {resolved_url}", 5000)
+            self.cast_status_label.setText(f"Cast: {url}")
+        self.statusBar().showMessage(f"Casting started: {url}", 5000)
+        debug_logger.log_cast_started(
+            self.current_video,
+            source=self._current_video_source,
+            url=url,
+            subtitle_path=subtitle_path,
+            autoplay=False,
+        )
+        self._update_cast_menu_actions()
         QMessageBox.information(
             self,
             "Casting Started",
-            "Streaming started successfully.\n\n"
-            f"Access it from another device using this URL:\n{resolved_url}"
+            "HLS streaming started successfully.\n\n"
+            f"Access from mobile device:\n{url}\n\n"
+            f"Compatible with:\n"
+            f"• VLC for Android/iOS\n"
+            f"• MX Player\n"
+            f"• Modern web browsers\n\n"
+            f"Subtitles loaded for casting: {'Yes' if subtitle_path else 'No'}"
         )
 
     def stop_network_cast(self):
         """Stop the active casting session."""
         if not self.casting_manager.is_casting:
             self.statusBar().showMessage("No active casting session", 2000)
+            self._update_cast_menu_actions()
             return
 
         self.casting_manager.stop()
+        debug_logger.log_cast_stopped(
+            self.current_video,
+            source=self._current_video_source,
+            reason="user_requested",
+        )
         if hasattr(self, "cast_status_label"):
             self.cast_status_label.clear()
         self.statusBar().showMessage("Casting stopped", 3000)
@@ -1157,6 +1272,7 @@ class VideoPlayer(QMainWindow):
             "Casting Stopped",
             "Network casting has been stopped."
         )
+        self._update_cast_menu_actions()
     
     def show_subtitle_search(self):
         """Show subtitle search dialog"""

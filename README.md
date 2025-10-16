@@ -109,6 +109,16 @@ pip install -r requirements.txt
 
 ### Running the Application
 
+#### From Repository Root (Cassiano-Portfolio)
+```bash
+./run-subtitleplayer.sh
+# Optional: verify without launching the GUI
+# ./run-subtitleplayer.sh --dry-run
+```
+
+This helper script delegates to `SubtitlePlayer/run.sh`, automatically creating the
+virtual environment and installing dependencies on first launch.
+
 #### From Terminal:
 ```bash
 cd ~/Documents/SubtitlePlayer
@@ -163,8 +173,9 @@ chmod +x run.sh
 5. **Start a Local Network Cast**:
    1. Load a video and let playback begin.
    2. Open the **Cast** menu (or right-click the video) and choose **Start HTTP Cast**.
-   3. Share the displayed URL (default `http://<your-ip>:8080/`) with another device and open it in VLC or a compatible player.
+   3. Share the displayed URL (default `http://<your-ip>:8080/`) with another device and open it in VLC, a browser, or the Android CastPlayer client.
    4. Use **Stop Cast** from the same menu to terminate the stream.
+      - Tip: Cast sessions now transcode to 1080p H.264 (8-bit, High Profile Level 4.1) with stereo AAC audio for broad device compatibility. 4K Dolby Vision sources may take up to 60 seconds before the manifest appears. If a cast fails, check `logs/cast_failures/` for the captured FFmpeg logs and metadata.
 
 ## Configuration
 

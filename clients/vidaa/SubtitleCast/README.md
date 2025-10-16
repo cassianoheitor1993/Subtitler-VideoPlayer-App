@@ -25,6 +25,6 @@ A minimal HTML5 application for Hisense VIDAA TVs that plays the SubtitlePlayer 
 5. Deploy to the TV via VIDAA Developer Mode or USB depending on model.
 
 ## Notes
-- Ensure the SubtitlePlayer host is reachable from the TV; use the LAN IP (e.g. `http://10.0.0.59:8080/live.ts`).
-- The video element expects MPEG-TS (H.264/AAC). Adjust SubtitlePlayer to transcode when necessary.
-- If buffering is excessive, consider using HLS segments instead of raw TS in the future.
+- Ensure the SubtitlePlayer host is reachable from the TV; use the LAN IP (e.g. `http://10.0.0.59:8080/stream.m3u8`).
+- The player now targets the FFmpeg powered HLS output (`stream.m3u8`). Most VIDAA firmware builds support HLS natively in the video element; if yours does not, bundle `hls.js` and enable the fallback loader in `app.js`.
+- If buffering is excessive, lower the HLS segment duration in `FFmpegCastingConfig` or switch to a lower-bitrate profile.

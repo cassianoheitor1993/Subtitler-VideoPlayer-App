@@ -1,0 +1,122 @@
+{
+  "totals": {
+    "events": 37,
+    "sample_autoplay_starts": 5,
+    "video_loads": 10,
+    "cast_starts": 9,
+    "autoplay_casts": 5,
+    "cast_stops": 5
+  },
+  "videos": {
+    "/home/cmedeiros/Documents/Cassiano-Portfolio/Subtitler-App/SubtitlePlayer/temp/sample.mp4": {
+      "video_path": "/home/cmedeiros/Documents/Cassiano-Portfolio/Subtitler-App/SubtitlePlayer/temp/sample.mp4",
+      "video_name": "sample.mp4",
+      "loads": 5,
+      "casts_started": 5,
+      "casts_stopped": 5,
+      "last_loaded_at": "2025-10-16T20:19:47.089917+00:00",
+      "last_source": "sample_autoplay",
+      "loop_enabled": true,
+      "last_cast_started_at": "2025-10-16T20:19:58.392160+00:00",
+      "last_cast_url": "http://10.0.0.59:8080/stream.m3u8",
+      "last_cast_source": "sample_autoplay",
+      "subtitle_on_cast": false,
+      "last_cast_stopped_at": "2025-10-16T20:20:12.368805+00:00",
+      "last_stop_reason": "video_changed"
+    },
+    "/home/cmedeiros/Downloads/The.Fantastic.Four.First.Steps.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi.TrueHD.Atmos.H265-BEN.THE.MEN/The.Fantastic.Four.First.Steps.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi[Ben The Men].mkv": {
+      "video_path": "/home/cmedeiros/Downloads/The.Fantastic.Four.First.Steps.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi.TrueHD.Atmos.H265-BEN.THE.MEN/The.Fantastic.Four.First.Steps.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi[Ben The Men].mkv",
+      "video_name": "The.Fantastic.Four.First.Steps.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi[Ben The Men].mkv",
+      "loads": 5,
+      "casts_started": 4,
+      "casts_stopped": 0,
+      "last_loaded_at": "2025-10-16T20:20:12.368350+00:00",
+      "last_source": "user",
+      "loop_enabled": false,
+      "last_cast_started_at": "2025-10-16T20:20:41.119539+00:00",
+      "last_cast_url": "http://10.0.0.59:8080/stream.m3u8",
+      "last_cast_source": "user",
+      "subtitle_on_cast": true
+    }
+  },
+  "video_sources": {
+    "sample_autoplay": 5,
+    "user": 5
+  },
+  "cast_sources": {
+    "sample_autoplay": 5,
+    "user": 4
+  },
+  "sessions": {
+    "0ecb2362-bfc4-4a82-a715-73de760477c6": {
+      "session_id": "0ecb2362-bfc4-4a82-a715-73de760477c6",
+      "started_at": "2025-10-16T16:58:10.601993+00:00",
+      "events": 8,
+      "video_loads": 2,
+      "cast_starts": 1,
+      "cast_stops": 1,
+      "autoplay_starts": 2,
+      "last_event_at": "2025-10-16T17:01:26.839926+00:00"
+    },
+    "ea5f9818-3f56-443d-81ae-d1a38b19e1ca": {
+      "session_id": "ea5f9818-3f56-443d-81ae-d1a38b19e1ca",
+      "started_at": "2025-10-16T17:20:38.313309+00:00",
+      "events": 7,
+      "video_loads": 2,
+      "cast_starts": 2,
+      "cast_stops": 1,
+      "autoplay_starts": 2,
+      "last_event_at": "2025-10-16T17:22:28.074939+00:00"
+    },
+    "db737326-7856-420b-81c8-28e4291e64eb": {
+      "session_id": "db737326-7856-420b-81c8-28e4291e64eb",
+      "started_at": "2025-10-16T18:41:41.052868+00:00",
+      "events": 7,
+      "video_loads": 2,
+      "cast_starts": 2,
+      "cast_stops": 1,
+      "autoplay_starts": 2,
+      "last_event_at": "2025-10-16T18:43:07.292541+00:00"
+    },
+    "f9220d6c-f0a5-4b94-bb3f-46fb1ab5e205": {
+      "session_id": "f9220d6c-f0a5-4b94-bb3f-46fb1ab5e205",
+      "started_at": "2025-10-16T18:43:49.088505+00:00",
+      "events": 7,
+      "video_loads": 2,
+      "cast_starts": 2,
+      "cast_stops": 1,
+      "autoplay_starts": 2,
+      "last_event_at": "2025-10-16T18:44:53.982076+00:00"
+    },
+    "378a2775-1bd5-4f22-ae6a-831210fb39f4": {
+      "session_id": "378a2775-1bd5-4f22-ae6a-831210fb39f4",
+      "started_at": "2025-10-16T20:19:46.855334+00:00",
+      "events": 8,
+      "video_loads": 2,
+      "cast_starts": 2,
+      "cast_stops": 1,
+      "autoplay_starts": 2,
+      "last_event_at": "2025-10-16T20:21:11.896501+00:00"
+    }
+  },
+  "session_order": [
+    "0ecb2362-bfc4-4a82-a715-73de760477c6",
+    "ea5f9818-3f56-443d-81ae-d1a38b19e1ca",
+    "db737326-7856-420b-81c8-28e4291e64eb",
+    "f9220d6c-f0a5-4b94-bb3f-46fb1ab5e205",
+    "378a2775-1bd5-4f22-ae6a-831210fb39f4"
+  ],
+  "last_session_started_at": "2025-10-16T20:19:46.855334+00:00",
+  "last_event": {
+    "timestamp": "2025-10-16T20:21:11.896501+00:00",
+    "session_id": "378a2775-1bd5-4f22-ae6a-831210fb39f4",
+    "event": "subtitle_linked",
+    "data": {
+      "video_path": "/home/cmedeiros/Downloads/The.Fantastic.Four.First.Steps.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi.TrueHD.Atmos.H265-BEN.THE.MEN/The.Fantastic.Four.First.Steps.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi[Ben The Men].mkv",
+      "video_name": "The.Fantastic.Four.First.Steps.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi[Ben The Men].mkv",
+      "subtitle_path": "/home/cmedeiros/Downloads/The.Fantastic.Four.First.Steps.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi.TrueHD.Atmos.H265-BEN.THE.MEN/The.Fantastic.Four.First.Steps.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi[Ben The Men].srt",
+      "subtitle_name": "The.Fantastic.Four.First.Steps.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi[Ben The Men].srt"
+    }
+  },
+  "last_updated_at": "2025-10-16T20:21:11.896501+00:00"
+}

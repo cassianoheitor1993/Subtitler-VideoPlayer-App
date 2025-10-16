@@ -1,12 +1,15 @@
 package com.subtitleplayer.cast
 
+import android.net.Uri
 import android.os.Bundle
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.viewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
-import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.MimeTypes
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.google.android.material.button.MaterialButton
@@ -25,6 +28,11 @@ class MainActivity : ComponentActivity() {
     private lateinit var urlInput: TextInputEditText
 
     private val viewModel: PlayerViewModel by viewModels()
+    private val playerListener = object : Player.Listener {
+        override fun onPlayerError(error: PlaybackException) {
+            statusLabel.text = getString(R.string.status_error, error.errorCodeName)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,10 +47,11 @@ class MainActivity : ComponentActivity() {
         urlInput.setText(viewModel.streamUrl)
 
         playButton.setOnClickListener {
-            val url = urlInput.text?.toString().orEmpty().trim()
-            if (url.isNotEmpty()) {
-                viewModel.streamUrl = url
-                startPlayback(url)
+            val normalized = normalizeUrl(urlInput.text?.toString().orEmpty())
+            if (normalized.isNotEmpty()) {
+                urlInput.setText(normalized)
+                viewModel.streamUrl = normalized
+                startPlayback(normalized)
             }
         }
 
@@ -65,6 +74,7 @@ class MainActivity : ComponentActivity() {
 
     private fun initPlayer() {
         player = ExoPlayer.Builder(this).build().also { exoPlayer ->
+            exoPlayer.addListener(playerListener)
             playerView.player = exoPlayer
         }
     }
@@ -76,9 +86,9 @@ class MainActivity : ComponentActivity() {
         }
 
         lifecycleScope.launch {
-            statusLabel.text = getString(R.string.status_ready)
+            statusLabel.text = getString(R.string.status_loading)
             withContext(Dispatchers.Main) {
-                exoPlayer.setMediaItem(MediaItem.fromUri(url))
+                exoPlayer.setMediaItem(buildMediaItem(url))
                 exoPlayer.prepare()
                 exoPlayer.playWhenReady = true
                 statusLabel.text = getString(R.string.status_playing)
@@ -95,7 +105,34 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun releasePlayer() {
+        player?.removeListener(playerListener)
         player?.release()
         player = null
+    }
+
+    private fun normalizeUrl(raw: String): String {
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty()) {
+            return ""
+        }
+
+        val uri = runCatching { Uri.parse(trimmed) }.getOrNull()
+        if (uri?.host == "0.0.0.0") {
+            val fallback = runCatching { Uri.parse(viewModel.streamUrl) }.getOrNull()
+            if (fallback?.host != null && fallback.host != "0.0.0.0") {
+                val authority = if (fallback.port != -1) "${fallback.host}:${fallback.port}" else fallback.host
+                return uri.buildUpon().encodedAuthority(authority).build().toString()
+            }
+        }
+
+        return trimmed
+    }
+
+    private fun buildMediaItem(url: String): MediaItem {
+        val builder = MediaItem.Builder().setUri(url)
+        if (url.contains(".m3u8", ignoreCase = true)) {
+            builder.setMimeType(MimeTypes.APPLICATION_M3U8)
+        }
+        return builder.build()
     }
 }

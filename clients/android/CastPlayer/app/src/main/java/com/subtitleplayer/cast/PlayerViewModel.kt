@@ -23,6 +23,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     companion object {
         private const val KEY_STREAM_URL = "stream_url"
-        private const val DEFAULT_URL = "http://10.0.0.59:8080/live.ts"
+        private const val DEFAULT_URL = "http://10.0.0.59:8080/stream.m3u8"
     }
 }
