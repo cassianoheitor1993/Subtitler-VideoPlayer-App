@@ -1801,9 +1801,15 @@ class VideoPlayer(QMainWindow):
             # Position relative to main window
             self.position_ai_progress_indicator()
         
-        # Show indicator with initial status
+        # Show indicator with CURRENT status from dialog (not reset to 0%)
         print(f"  - Showing indicator")
-        self.ai_progress_indicator.update_status("0% - Initializing...")
+        
+        # Get current progress from dialog
+        current_progress = dialog.progress_bar.value()
+        current_message = dialog.status_label.text()
+        print(f"  - Dialog current progress: {current_progress}% - {current_message}")
+        
+        self.ai_progress_indicator.update_status(f"{current_progress}% - {current_message}")
         self.ai_progress_indicator.start_animation()
         self.ai_progress_indicator.show()
         self.ai_progress_indicator.raise_()  # Bring to front
