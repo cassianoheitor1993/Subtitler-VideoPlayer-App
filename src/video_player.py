@@ -240,6 +240,11 @@ class VideoPlayer(QMainWindow):
         self.ai_progress_indicator = None  # Created when needed
         self.minimized_ai_dialog = None  # Reference to minimized dialog
         
+        # Timer to keep indicator positioned
+        self.indicator_position_timer = QTimer(self)
+        self.indicator_position_timer.setInterval(100)  # Update every 100ms
+        self.indicator_position_timer.timeout.connect(self.position_ai_progress_indicator)
+        
         # Auto-hide controls
         self.controls_visible = True
         self.mouse_move_timer = QTimer(self)
@@ -1805,16 +1810,27 @@ class VideoPlayer(QMainWindow):
         print(f"  - Indicator visible: {self.ai_progress_indicator.isVisible()}")
         print(f"  - Indicator position: ({self.ai_progress_indicator.x()}, {self.ai_progress_indicator.y()})")
         
-        # Connect to completion signal to hide indicator
+        # Start position timer to keep indicator in top-right
+        self.indicator_position_timer.start()
+        print(f"  - Position timer started")
+        
+        # Connect progress updates from thread directly to indicator
         if hasattr(dialog, 'gen_thread'):
+            # Connect progress signal to update indicator
+            def update_indicator_progress(message, percent):
+                if self.ai_progress_indicator and self.ai_progress_indicator.isVisible():
+                    self.ai_progress_indicator.update_status(f"{percent}% - {message}")
+                    print(f"[INDICATOR] Updated from thread signal: {percent}% - {message}")
+            
+            dialog.gen_thread.progress_update.connect(update_indicator_progress)
             dialog.gen_thread.finished.connect(self.on_ai_generation_finished)
-            print(f"  - Connected to gen_thread.finished")
+            print(f"  - Connected to gen_thread signals (progress + finished)")
         
         print(f"[{timestamp}] === ON_AI_DIALOG_MINIMIZED COMPLETE ===\n")
     
     def position_ai_progress_indicator(self):
         """Position the AI progress indicator in top-right corner"""
-        if not self.ai_progress_indicator:
+        if not self.ai_progress_indicator or not self.ai_progress_indicator.isVisible():
             return
         
         # Get main window position and size
@@ -1827,39 +1843,56 @@ class VideoPlayer(QMainWindow):
         x = main_pos.x() + main_width - indicator_width - 20
         y = main_pos.y() + 80  # Below menu bar
         
-        # Debug log
-        print(f"[POSITION] Main window pos: ({main_pos.x()}, {main_pos.y()})")
-        print(f"[POSITION] Main window size: {main_width}x{self.height()}")
-        print(f"[POSITION] Indicator size: {indicator_width}x{indicator_height}")
-        print(f"[POSITION] Setting absolute position to: ({x}, {y})")
-        
-        self.ai_progress_indicator.move(x, y)
-        
-        # Force update
-        self.ai_progress_indicator.update()
-        self.ai_progress_indicator.repaint()
+        # Only move if position changed significantly (avoid spam)
+        current_pos = (self.ai_progress_indicator.x(), self.ai_progress_indicator.y())
+        new_pos = (x, y)
+        if abs(current_pos[0] - new_pos[0]) > 5 or abs(current_pos[1] - new_pos[1]) > 5:
+            self.ai_progress_indicator.move(x, y)
+            self.ai_progress_indicator.raise_()  # Keep on top
     
     def restore_ai_dialog(self):
         """Restore minimized AI dialog"""
+        print(f"[RESTORE] restore_ai_dialog called")
+        print(f"  - Has minimized_ai_dialog: {self.minimized_ai_dialog is not None}")
+        
         if self.minimized_ai_dialog:
+            print(f"  - Restoring dialog...")
+            
+            # Stop position timer
+            if self.indicator_position_timer.isActive():
+                self.indicator_position_timer.stop()
+                print(f"  - Stopped position timer")
+            
             # Hide and stop indicator
             if self.ai_progress_indicator:
                 self.ai_progress_indicator.stop_animation()
                 self.ai_progress_indicator.hide()
+                print(f"  - Hidden indicator")
             
             # Show dialog again
+            self.minimized_ai_dialog.minimized = False
             self.minimized_ai_dialog.is_minimized = False
             self.minimized_ai_dialog.show()
             self.minimized_ai_dialog.raise_()
             self.minimized_ai_dialog.activateWindow()
+            print(f"  - Dialog restored and activated")
     
     def on_ai_generation_finished(self):
         """Handle AI generation completion"""
+        print(f"[FINISHED] AI generation finished")
+        
+        # Stop position timer
+        if hasattr(self, 'indicator_position_timer') and self.indicator_position_timer.isActive():
+            self.indicator_position_timer.stop()
+            print(f"  - Stopped position timer")
+        
         if self.ai_progress_indicator:
             self.ai_progress_indicator.stop_animation()
             self.ai_progress_indicator.hide()
+            print(f"  - Hidden indicator")
         
         self.minimized_ai_dialog = None
+        print(f"  - Cleared minimized dialog reference")
     
     def show_about(self):
         """Show about dialog"""

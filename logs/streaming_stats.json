@@ -1,8 +1,8 @@
 {
   "totals": {
-    "events": 167,
+    "events": 169,
     "sample_autoplay_starts": 17,
-    "video_loads": 49,
+    "video_loads": 50,
     "cast_starts": 28,
     "autoplay_casts": 16,
     "cast_stops": 21
@@ -85,17 +85,17 @@
     "/home/cmedeiros/Downloads/Weapons.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi.TrueHD.Atmos.7.1.H265-BEN.THE.MEN/Weapons.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi[Ben The Men].mkv": {
       "video_path": "/home/cmedeiros/Downloads/Weapons.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi.TrueHD.Atmos.7.1.H265-BEN.THE.MEN/Weapons.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi[Ben The Men].mkv",
       "video_name": "Weapons.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi[Ben The Men].mkv",
-      "loads": 10,
+      "loads": 11,
       "casts_started": 0,
       "casts_stopped": 0,
-      "last_loaded_at": "2025-10-20T17:03:31.479966+00:00",
+      "last_loaded_at": "2025-10-20T18:12:31.597755+00:00",
       "last_source": "user",
       "loop_enabled": false
     }
   },
   "video_sources": {
     "sample_autoplay": 17,
-    "user": 32
+    "user": 33
   },
   "cast_sources": {
     "sample_autoplay": 16,
@@ -466,6 +466,16 @@
       "cast_stops": 0,
       "autoplay_starts": 0,
       "last_event_at": "2025-10-20T17:03:31.487053+00:00"
+    },
+    "46f6082f-99a5-4415-8fa7-a09a12a64ffb": {
+      "session_id": "46f6082f-99a5-4415-8fa7-a09a12a64ffb",
+      "started_at": "2025-10-20T18:12:17.987713+00:00",
+      "events": 2,
+      "video_loads": 1,
+      "cast_starts": 0,
+      "cast_stops": 0,
+      "autoplay_starts": 0,
+      "last_event_at": "2025-10-20T18:12:31.604784+00:00"
     }
   },
   "session_order": [
@@ -505,12 +515,13 @@
     "00e2250a-79f4-446c-a073-b2c78393bcff",
     "7335c64c-197c-403a-a372-386ca7be6f32",
     "774a0818-1011-4e36-ab7e-c8c2ca210217",
-    "d825778f-38a4-46ef-8a68-787de0c28722"
+    "d825778f-38a4-46ef-8a68-787de0c28722",
+    "46f6082f-99a5-4415-8fa7-a09a12a64ffb"
   ],
-  "last_session_started_at": "2025-10-20T17:03:13.647493+00:00",
+  "last_session_started_at": "2025-10-20T18:12:17.987713+00:00",
   "last_event": {
-    "timestamp": "2025-10-20T17:03:31.487053+00:00",
-    "session_id": "d825778f-38a4-46ef-8a68-787de0c28722",
+    "timestamp": "2025-10-20T18:12:31.604784+00:00",
+    "session_id": "46f6082f-99a5-4415-8fa7-a09a12a64ffb",
     "event": "subtitle_linked",
     "data": {
       "video_path": "/home/cmedeiros/Downloads/Weapons.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi.TrueHD.Atmos.7.1.H265-BEN.THE.MEN/Weapons.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi[Ben The Men].mkv",
@@ -519,5 +530,5 @@
       "subtitle_name": "Weapons.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi[Ben The Men].srt"
     }
   },
-  "last_updated_at": "2025-10-20T17:03:31.487053+00:00"
+  "last_updated_at": "2025-10-20T18:12:31.604784+00:00"
 }

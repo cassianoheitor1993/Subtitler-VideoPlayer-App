@@ -30,18 +30,23 @@ class AIGenerationThread(QThread):
     def run(self):
         """Run AI generation"""
         try:
+            print(f"[THREAD] AIGenerationThread.run() started")
             generator = AISubtitleGenerator(self.model_size)
             
             # Progress callback
             def progress_cb(message, percent):
+                print(f"[THREAD] progress_cb called: {percent}% - {message}")
                 self.progress_update.emit(message, percent)
+                print(f"[THREAD] progress_update signal emitted")
             
             # Generate subtitles
+            print(f"[THREAD] Calling generate_subtitles...")
             segments = generator.generate_subtitles(
                 self.video_path,
                 self.language if self.language != "auto" else None,
                 progress_cb
             )
+            print(f"[THREAD] generate_subtitles returned {len(segments) if segments else 0} segments")
             
             if segments:
                 self.generation_complete.emit(segments)
