@@ -10,7 +10,8 @@ from pathlib import Path
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QSlider, QLabel, QFileDialog, QFrame, QStyle, QApplication,
-    QMenu, QMessageBox, QSplitter, QSplitterHandle, QSizePolicy
+    QMenu, QMessageBox, QSplitter, QSplitterHandle, QSizePolicy,
+    QDialog
 )
 from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal, QPoint
 from PyQt6.QtGui import QAction, QPalette, QColor, QFont, QPainter, QPen
@@ -70,15 +71,38 @@ class VideoFrame(QWidget):
     
     double_clicked = pyqtSignal()
     resized = pyqtSignal()
+    context_menu_requested = pyqtSignal(QPoint)
+    mouse_moved = pyqtSignal()
     
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setStyleSheet("background-color: #000000;")
+        self.setMouseTracking(True)  # Enable mouse tracking
+        # Accept right-click events
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.DefaultContextMenu)
+    
+    def contextMenuEvent(self, event):
+        """Handle context menu event (right-click)"""
+        self.context_menu_requested.emit(event.pos())
+        event.accept()
     
     def mouseDoubleClickEvent(self, event):
         """Handle double-click events"""
         self.double_clicked.emit()
-        super().mouseDoubleClickEvent(event)
+        event.accept()
+    
+    def mousePressEvent(self, event):
+        """Handle mouse press events including right-click"""
+        if event.button() == Qt.MouseButton.RightButton:
+            self.context_menu_requested.emit(event.pos())
+            event.accept()
+        else:
+            super().mousePressEvent(event)
+    
+    def mouseMoveEvent(self, event):
+        """Handle mouse move events"""
+        self.mouse_moved.emit()
+        super().mouseMoveEvent(event)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -190,6 +214,10 @@ class VideoPlayer(QMainWindow):
     def __init__(self):
         super().__init__()
         
+        # Initialize resource manager first
+        from resource_manager import get_resource_manager
+        self.resource_manager = get_resource_manager()
+        
         self.config_manager = ConfigManager()
         self.subtitle_parser = SubtitleParser()
         self.current_video = None
@@ -200,6 +228,24 @@ class VideoPlayer(QMainWindow):
         self.streaming_stats_dialog = None
         self.playback_rate = 1.0
         self._sample_autoplayed = False
+        
+        # Background task manager
+        from background_task_manager import BackgroundTaskManager
+        from status_indicator_widget import StatusIndicatorWidget
+        self.task_manager = BackgroundTaskManager()
+        self.status_indicator = None  # Will be created after UI setup
+        
+        # Simple progress indicator for AI generation
+        from simple_progress_indicator import SimpleProgressIndicator
+        self.ai_progress_indicator = None  # Created when needed
+        self.minimized_ai_dialog = None  # Reference to minimized dialog
+        
+        # Auto-hide controls
+        self.controls_visible = True
+        self.mouse_move_timer = QTimer(self)
+        self.mouse_move_timer.setInterval(3000)  # 3 seconds
+        self.mouse_move_timer.setSingleShot(True)
+        self.mouse_move_timer.timeout.connect(self.hide_controls)
         
         # VLC setup with suppressed logging
         vlc_args = [
@@ -212,7 +258,9 @@ class VideoPlayer(QMainWindow):
         ]
         self.instance = vlc.Instance(vlc_args)
         self.media_player = self.instance.media_player_new()
-        self.casting_manager = FFmpegCastingManager()
+        
+        # Pass resource manager to casting manager
+        self.casting_manager = FFmpegCastingManager(self.resource_manager)
         self.start_cast_action = None
         self.stop_cast_action = None
         
@@ -223,12 +271,16 @@ class VideoPlayer(QMainWindow):
         
         self.init_ui()
         self.apply_theme()
-        QTimer.singleShot(0, self._autoplay_sample_video)
+        # Disable sample video autoplay
+        # QTimer.singleShot(0, self._autoplay_sample_video)
         
     def init_ui(self):
         """Initialize user interface"""
         self.setWindowTitle("SubtitlePlayer - Professional Video Player")
         self.setGeometry(100, 100, 1200, 700)
+        
+        # Set focus policy to ensure keyboard events are captured
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         
         # Central widget
         central_widget = QWidget()
@@ -255,11 +307,11 @@ class VideoPlayer(QMainWindow):
         # Video frame with subtitle overlay
         self.video_frame = VideoFrame()
         self.video_frame.setMinimumHeight(400)
-        self.video_frame.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.video_frame.customContextMenuRequested.connect(self.show_video_context_menu)
         
-        # Connect double-click signal
+        # Connect signals
         self.video_frame.double_clicked.connect(self.video_double_click)
+        self.video_frame.context_menu_requested.connect(self.show_video_context_menu)
+        self.video_frame.mouse_moved.connect(self.on_video_mouse_move)
         self.video_frame.resized.connect(self.update_subtitle_window_geometry)
         
         left_layout.addWidget(self.video_frame, stretch=1)
@@ -293,19 +345,54 @@ class VideoPlayer(QMainWindow):
 
         # Add splitter to main layout
         main_layout.addWidget(self.splitter, stretch=1)
+        
+        # Status indicator widget (floating in top-right corner)
+        from status_indicator_widget import StatusIndicatorWidget
+        self.status_indicator = StatusIndicatorWidget(self)
+        self.status_indicator.task_clicked.connect(self.on_task_indicator_clicked)
+        self.status_indicator.cancel_requested.connect(self.on_task_cancel_requested)
+        
+        # Connect task manager signals to status indicator
+        self.task_manager.task_started.connect(self.status_indicator.add_task)
+        self.task_manager.task_progress.connect(self.status_indicator.update_task)
+        self.task_manager.task_completed.connect(self.status_indicator.update_task)
+        self.task_manager.task_failed.connect(self.status_indicator.update_task)
 
         # Control panel
-        control_panel = self.create_control_panel()
-        main_layout.addWidget(control_panel)
+        self.control_panel = self.create_control_panel()
+        main_layout.addWidget(self.control_panel)
         
         # Menu bar
         self.create_menu_bar()
         
-        # Status bar
-        self.statusBar().showMessage("Ready")
+        # Status bar with resource monitoring
+        self.statusBar().showMessage("Ready - Open a video file to begin")
+        
+        # Cast status label
         self.cast_status_label = QLabel("")
         self.cast_status_label.setStyleSheet("color: #8cdaff;")
         self.statusBar().addPermanentWidget(self.cast_status_label)
+        
+        # Resource monitor label
+        self.resource_monitor_label = QLabel("")
+        self.resource_monitor_label.setStyleSheet("color: #90EE90; font-size: 10px;")
+        self.resource_monitor_label.setToolTip("System resource usage")
+        self.statusBar().addPermanentWidget(self.resource_monitor_label)
+        self.update_resource_monitor()
+        
+        # Timer for resource monitoring (update every 5 seconds)
+        self.resource_monitor_timer = QTimer(self)
+        self.resource_monitor_timer.setInterval(5000)
+        self.resource_monitor_timer.timeout.connect(self.update_resource_monitor)
+        self.resource_monitor_timer.start()
+        
+        # Enable mouse tracking for auto-hide controls
+        self.setMouseTracking(True)
+        self.video_frame.setMouseTracking(True)
+        central_widget.setMouseTracking(True)
+        
+        # Install event filter to capture ESC key globally
+        QApplication.instance().installEventFilter(self)
         
         # Connect VLC to video frame - this embeds the video natively
         if sys.platform.startswith('linux'):
@@ -319,21 +406,64 @@ class VideoPlayer(QMainWindow):
         self.create_subtitle_window()
     
     def create_control_panel(self):
-        """Create video control panel"""
+        """Create modern video control panel with icons"""
         panel = QFrame()
         panel.setFrameStyle(QFrame.Shape.StyledPanel)
-        panel.setMinimumHeight(120)
+        panel.setMinimumHeight(80)
+        panel.setMaximumHeight(80)
         
         layout = QVBoxLayout()
+        layout.setContentsMargins(10, 5, 10, 5)
+        layout.setSpacing(5)
         panel.setLayout(layout)
         
-        # Timeline
-        timeline_layout = QHBoxLayout()
+        # Main controls layout - everything in one line
+        controls_layout = QHBoxLayout()
+        controls_layout.setSpacing(8)
         
+        # Play/Pause button with icon
+        self.play_pause_btn = QPushButton()
+        self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
+        self.play_pause_btn.clicked.connect(self.play_pause)
+        self.play_pause_btn.setEnabled(False)
+        self.play_pause_btn.setFixedSize(40, 40)
+        self.play_pause_btn.setToolTip("Play/Pause (Space)")
+        controls_layout.addWidget(self.play_pause_btn)
+        
+        # Stop button with icon
+        self.stop_btn = QPushButton()
+        self.stop_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaStop))
+        self.stop_btn.clicked.connect(self.stop)
+        self.stop_btn.setEnabled(False)
+        self.stop_btn.setFixedSize(40, 40)
+        self.stop_btn.setToolTip("Stop")
+        controls_layout.addWidget(self.stop_btn)
+        
+        # Seek backward button
+        self.seek_backward_btn = QPushButton()
+        self.seek_backward_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaSeekBackward))
+        self.seek_backward_btn.clicked.connect(self.seek_backward)
+        self.seek_backward_btn.setEnabled(False)
+        self.seek_backward_btn.setFixedSize(40, 40)
+        self.seek_backward_btn.setToolTip("Seek Backward 10s (←)")
+        controls_layout.addWidget(self.seek_backward_btn)
+        
+        # Seek forward button
+        self.seek_forward_btn = QPushButton()
+        self.seek_forward_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaSeekForward))
+        self.seek_forward_btn.clicked.connect(self.seek_forward)
+        self.seek_forward_btn.setEnabled(False)
+        self.seek_forward_btn.setFixedSize(40, 40)
+        self.seek_forward_btn.setToolTip("Seek Forward 10s (→)")
+        controls_layout.addWidget(self.seek_forward_btn)
+        
+        # Time label
         self.time_label = QLabel("00:00:00")
-        self.time_label.setMinimumWidth(80)
-        timeline_layout.addWidget(self.time_label)
+        self.time_label.setMinimumWidth(70)
+        self.time_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        controls_layout.addWidget(self.time_label)
         
+        # Timeline slider
         self.position_slider = QSlider(Qt.Orientation.Horizontal)
         self.position_slider.setMaximum(1000)
         self.position_slider.sliderMoved.connect(self.set_position)
@@ -341,76 +471,44 @@ class VideoPlayer(QMainWindow):
         self.position_slider.sliderReleased.connect(self.slider_released)
         # Enable click-to-seek on timeline
         self.position_slider.mousePressEvent = self.slider_click_seek
-        timeline_layout.addWidget(self.position_slider)
+        controls_layout.addWidget(self.position_slider)
         
+        # Duration label
         self.duration_label = QLabel("00:00:00")
-        self.duration_label.setMinimumWidth(80)
-        timeline_layout.addWidget(self.duration_label)
+        self.duration_label.setMinimumWidth(70)
+        self.duration_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        controls_layout.addWidget(self.duration_label)
         
-        layout.addLayout(timeline_layout)
+        # Volume icon button
+        self.volume_btn = QPushButton()
+        self.volume_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaVolume))
+        self.volume_btn.clicked.connect(self.toggle_mute)
+        self.volume_btn.setFixedSize(40, 40)
+        self.volume_btn.setToolTip("Mute/Unmute")
+        controls_layout.addWidget(self.volume_btn)
         
-        # Playback controls
-        controls_layout = QHBoxLayout()
-        
-        # Open file button
-        self.open_btn = QPushButton("Open Video")
-        self.open_btn.clicked.connect(self.open_file)
-        controls_layout.addWidget(self.open_btn)
-        
-        # Play/Pause button
-        self.play_pause_btn = QPushButton()
-        self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
-        self.play_pause_btn.clicked.connect(self.play_pause)
-        self.play_pause_btn.setEnabled(False)
-        controls_layout.addWidget(self.play_pause_btn)
-        
-        # Stop button
-        self.stop_btn = QPushButton()
-        self.stop_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaStop))
-        self.stop_btn.clicked.connect(self.stop)
-        self.stop_btn.setEnabled(False)
-        controls_layout.addWidget(self.stop_btn)
-        
-        controls_layout.addStretch()
-        
-        # Subtitle button
-        self.subtitle_btn = QPushButton("Load Subtitles")
-        self.subtitle_btn.clicked.connect(self.open_subtitle)
-        self.subtitle_btn.setEnabled(False)
-        controls_layout.addWidget(self.subtitle_btn)
-        
-        # Download subtitle button
-        self.download_subtitle_btn = QPushButton("Download Subtitles")
-        self.download_subtitle_btn.clicked.connect(self.show_subtitle_search)
-        self.download_subtitle_btn.setEnabled(False)
-        controls_layout.addWidget(self.download_subtitle_btn)
-        
-        # Subtitle settings sidebar toggle button
-        self.toggle_sidebar_btn = QPushButton("⚙ Settings Sidebar")
-        self.toggle_sidebar_btn.clicked.connect(self.toggle_subtitle_sidebar)
-        controls_layout.addWidget(self.toggle_sidebar_btn)
-        
-        # Legacy subtitle settings button
-        self.legacy_settings_btn = QPushButton("⚙ Legacy Settings")
-        self.legacy_settings_btn.clicked.connect(self.show_subtitle_settings)
-        controls_layout.addWidget(self.legacy_settings_btn)
-        
-        controls_layout.addStretch()
-        
-        # Volume control
-        volume_label = QLabel("Volume:")
-        controls_layout.addWidget(volume_label)
-        
+        # Volume slider
         self.volume_slider = QSlider(Qt.Orientation.Horizontal)
         self.volume_slider.setMaximum(100)
         self.volume_slider.setValue(self.config_manager.config.volume)
-        self.volume_slider.setMaximumWidth(100)
+        self.volume_slider.setFixedWidth(80)
         self.volume_slider.valueChanged.connect(self.set_volume)
+        self.volume_slider.setToolTip("Volume (↑/↓)")
         controls_layout.addWidget(self.volume_slider)
         
+        # Volume percentage label
         self.volume_label = QLabel(f"{self.config_manager.config.volume}%")
-        self.volume_label.setMinimumWidth(40)
+        self.volume_label.setMinimumWidth(35)
+        self.volume_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         controls_layout.addWidget(self.volume_label)
+        
+        # Settings button
+        self.settings_btn = QPushButton()
+        self.settings_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView))
+        self.settings_btn.clicked.connect(self.toggle_subtitle_sidebar)
+        self.settings_btn.setFixedSize(40, 40)
+        self.settings_btn.setToolTip("Toggle Settings Sidebar")
+        controls_layout.addWidget(self.settings_btn)
         
         layout.addLayout(controls_layout)
         
@@ -540,21 +638,16 @@ class VideoPlayer(QMainWindow):
             return "0.0.0.0"
     
     def create_menu_bar(self):
-        """Create menu bar"""
+        """Create comprehensive menu bar"""
         menubar = self.menuBar()
         
         # File menu
-        file_menu = menubar.addMenu("File")
+        file_menu = menubar.addMenu("&File")
         
-        open_action = QAction("Open Video", self)
+        open_action = QAction("&Open Video...", self)
         open_action.setShortcut("Ctrl+O")
         open_action.triggered.connect(self.open_file)
         file_menu.addAction(open_action)
-        
-        open_subtitle_action = QAction("Load Subtitle File", self)
-        open_subtitle_action.setShortcut("Ctrl+S")
-        open_subtitle_action.triggered.connect(self.open_subtitle)
-        file_menu.addAction(open_subtitle_action)
         
         file_menu.addSeparator()
         
@@ -564,66 +657,131 @@ class VideoPlayer(QMainWindow):
         
         file_menu.addSeparator()
         
-        exit_action = QAction("Exit", self)
+        exit_action = QAction("E&xit", self)
         exit_action.setShortcut("Ctrl+Q")
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
         
         # Playback menu
-        playback_menu = menubar.addMenu("Playback")
+        playback_menu = menubar.addMenu("&Playback")
         
-        play_action = QAction("Play/Pause", self)
+        play_action = QAction("&Play/Pause", self)
         play_action.setShortcut("Space")
         play_action.triggered.connect(self.play_pause)
         playback_menu.addAction(play_action)
         
-        stop_action = QAction("Stop", self)
+        stop_action = QAction("&Stop", self)
+        stop_action.setShortcut("Ctrl+S")
         stop_action.triggered.connect(self.stop)
         playback_menu.addAction(stop_action)
         
-        fullscreen_action = QAction("Fullscreen", self)
+        playback_menu.addSeparator()
+        
+        seek_forward_action = QAction("Seek &Forward 10s", self)
+        seek_forward_action.setShortcut("Right")
+        seek_forward_action.triggered.connect(self.seek_forward)
+        playback_menu.addAction(seek_forward_action)
+        
+        seek_backward_action = QAction("Seek &Backward 10s", self)
+        seek_backward_action.setShortcut("Left")
+        seek_backward_action.triggered.connect(self.seek_backward)
+        playback_menu.addAction(seek_backward_action)
+        
+        playback_menu.addSeparator()
+        
+        fullscreen_action = QAction("&Fullscreen", self)
         fullscreen_action.setShortcut("F")
         fullscreen_action.triggered.connect(self.toggle_fullscreen)
         playback_menu.addAction(fullscreen_action)
         
-        # Subtitles menu
-        subtitle_menu = menubar.addMenu("Subtitles")
+        # Audio menu
+        audio_menu = menubar.addMenu("&Audio")
         
-        download_action = QAction("Download Subtitles", self)
+        volume_up_action = QAction("Volume &Up", self)
+        volume_up_action.setShortcut("Up")
+        volume_up_action.triggered.connect(lambda: self.adjust_volume(10))
+        audio_menu.addAction(volume_up_action)
+        
+        volume_down_action = QAction("Volume &Down", self)
+        volume_down_action.setShortcut("Down")
+        volume_down_action.triggered.connect(lambda: self.adjust_volume(-10))
+        audio_menu.addAction(volume_down_action)
+        
+        mute_action = QAction("&Mute/Unmute", self)
+        mute_action.setShortcut("M")
+        mute_action.triggered.connect(self.toggle_mute)
+        audio_menu.addAction(mute_action)
+        
+        audio_menu.addSeparator()
+        
+        speed_up_action = QAction("Speed &Increase", self)
+        speed_up_action.setShortcut("]")
+        speed_up_action.triggered.connect(lambda: self.adjust_playback_speed(0.25))
+        audio_menu.addAction(speed_up_action)
+        
+        speed_down_action = QAction("Speed &Decrease", self)
+        speed_down_action.setShortcut("[")
+        speed_down_action.triggered.connect(lambda: self.adjust_playback_speed(-0.25))
+        audio_menu.addAction(speed_down_action)
+        
+        reset_speed_action = QAction("&Reset Speed", self)
+        reset_speed_action.setShortcut("Backspace")
+        reset_speed_action.triggered.connect(self.reset_playback_speed)
+        audio_menu.addAction(reset_speed_action)
+        
+        # Subtitles menu
+        subtitle_menu = menubar.addMenu("&Subtitles")
+        
+        load_subtitle_action = QAction("&Load Subtitle File...", self)
+        load_subtitle_action.setShortcut("Ctrl+L")
+        load_subtitle_action.triggered.connect(self.open_subtitle)
+        subtitle_menu.addAction(load_subtitle_action)
+        
+        download_action = QAction("&Download Subtitles...", self)
         download_action.setShortcut("Ctrl+D")
         download_action.triggered.connect(self.show_subtitle_search)
         subtitle_menu.addAction(download_action)
         
-        settings_action = QAction("Subtitle Settings", self)
-        settings_action.triggered.connect(self.show_subtitle_settings)
-        subtitle_menu.addAction(settings_action)
-        
-        subtitle_menu.addSeparator()
-        
-        ai_gen_action = QAction("Generate Subtitles (AI)", self)
+        ai_gen_action = QAction("&Generate Subtitles (AI)...", self)
         ai_gen_action.setShortcut("Ctrl+G")
         ai_gen_action.triggered.connect(self.show_ai_subtitle_generator)
         subtitle_menu.addAction(ai_gen_action)
+        
+        subtitle_menu.addSeparator()
+        
+        settings_action = QAction("Subtitle &Settings...", self)
+        settings_action.setShortcut("Ctrl+,")
+        settings_action.triggered.connect(self.show_subtitle_settings)
+        subtitle_menu.addAction(settings_action)
+        
+        sidebar_action = QAction("Toggle Settings Si&debar", self)
+        sidebar_action.setShortcut("Ctrl+B")
+        sidebar_action.triggered.connect(self.toggle_subtitle_sidebar)
+        subtitle_menu.addAction(sidebar_action)
 
         # Cast menu
-        cast_menu = menubar.addMenu("Cast")
+        cast_menu = menubar.addMenu("&Cast")
 
-        self.start_cast_action = QAction("Start HTTP Cast", self)
+        self.start_cast_action = QAction("&Start HTTP Cast...", self)
+        self.start_cast_action.setShortcut("Ctrl+Shift+C")
         self.start_cast_action.triggered.connect(self.start_network_cast)
         cast_menu.addAction(self.start_cast_action)
 
-        self.stop_cast_action = QAction("Stop Cast", self)
+        self.stop_cast_action = QAction("St&op Cast", self)
+        self.stop_cast_action.setShortcut("Ctrl+Shift+X")
         self.stop_cast_action.triggered.connect(self.stop_network_cast)
         cast_menu.addAction(self.stop_cast_action)
         
-        # Help menu
-        help_menu = menubar.addMenu("Help")
-
-        analytics_action = QAction("Streaming Analytics", self)
-        analytics_action.triggered.connect(self.show_streaming_stats)
-        help_menu.addAction(analytics_action)
+        cast_menu.addSeparator()
         
-        about_action = QAction("About", self)
+        analytics_action = QAction("Streaming &Analytics...", self)
+        analytics_action.triggered.connect(self.show_streaming_stats)
+        cast_menu.addAction(analytics_action)
+        
+        # Help menu
+        help_menu = menubar.addMenu("&Help")
+        
+        about_action = QAction("&About", self)
         about_action.triggered.connect(self.show_about)
         help_menu.addAction(about_action)
 
@@ -784,8 +942,8 @@ class VideoPlayer(QMainWindow):
         # Enable controls
         self.play_pause_btn.setEnabled(True)
         self.stop_btn.setEnabled(True)
-        self.subtitle_btn.setEnabled(True)
-        self.download_subtitle_btn.setEnabled(True)
+        self.seek_forward_btn.setEnabled(True)
+        self.seek_backward_btn.setEnabled(True)
         
         # Try to auto-load subtitle
         subtitle_file = self.config_manager.get_subtitle_file_for_video(file_path)
@@ -902,18 +1060,51 @@ class VideoPlayer(QMainWindow):
         if self.media_player.is_playing():
             self.media_player.pause()
             self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
+            self.mouse_move_timer.stop()  # Stop auto-hide when paused
+            self.show_controls()  # Show controls when paused
         else:
             self.media_player.play()
             self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
             self.timer.start()
+            self.mouse_move_timer.start()  # Start auto-hide when playing
     
     def stop(self):
         """Stop playback"""
         self.media_player.stop()
         self.timer.stop()
+        self.mouse_move_timer.stop()  # Stop auto-hide when stopped
+        self.show_controls()  # Show controls when stopped
         self.play_pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
         self.position_slider.setValue(0)
         self.subtitle_overlay.set_subtitle("")
+    
+    def seek_forward(self):
+        """Seek forward 10 seconds"""
+        if self.media_player.get_length() > 0:
+            current_time = self.media_player.get_time()  # milliseconds
+            new_time = current_time + 10000  # Add 10 seconds
+            self.media_player.set_time(new_time)
+    
+    def seek_backward(self):
+        """Seek backward 10 seconds"""
+        if self.media_player.get_length() > 0:
+            current_time = self.media_player.get_time()  # milliseconds
+            new_time = max(0, current_time - 10000)  # Subtract 10 seconds, but not below 0
+            self.media_player.set_time(new_time)
+    
+    def toggle_mute(self):
+        """Toggle mute/unmute"""
+        is_muted = self.media_player.audio_get_mute()
+        self.media_player.audio_set_mute(not is_muted)
+        
+        if not is_muted:
+            # Muting
+            self.volume_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaVolumeMuted))
+            self.volume_btn.setToolTip("Unmute")
+        else:
+            # Unmuting
+            self.volume_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaVolume))
+            self.volume_btn.setToolTip("Mute")
     
     def set_position(self, position):
         """Set playback position from slider"""
@@ -985,47 +1176,146 @@ class VideoPlayer(QMainWindow):
         """Toggle fullscreen mode with proper escape handling"""
         if self.isFullScreen():
             self.showNormal()
-            # Re-enable menu bar and status bar
+            # Force show all controls when exiting fullscreen
             self.menuBar().show()
             self.statusBar().show()
+            self.control_panel.show()
+            self.controls_visible = True
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+            # Stop auto-hide timer when exiting fullscreen
+            self.mouse_move_timer.stop()
         else:
             self.showFullScreen()
-            # Keep menu bar visible in fullscreen for easy exit
-            self.menuBar().show()
+            # Ensure window has focus for keyboard events
+            self.setFocus()
+            self.activateWindow()
+            # Start auto-hide timer if playing
+            if self.media_player.is_playing():
+                self.mouse_move_timer.start()
+    
+    def mouseMoveEvent(self, event):
+        """Handle mouse movement to show controls"""
+        self.show_controls()
+        self.mouse_move_timer.start()  # Restart the timer
+        super().mouseMoveEvent(event)
+    
+    def on_video_mouse_move(self):
+        """Handle mouse movement over video frame"""
+        self.show_controls()
+        if self.media_player.is_playing():
+            self.mouse_move_timer.start()  # Restart the timer
+    
+    def show_controls(self):
+        """Show menu bar, status bar, and control panel"""
+        self.menuBar().show()
+        self.statusBar().show()
+        self.control_panel.show()
+        self.controls_visible = True
+        # Show cursor
+        self.setCursor(Qt.CursorShape.ArrowCursor)
+    
+    def hide_controls(self):
+        """Hide menu bar, status bar, and control panel (only when playing)"""
+        # Only hide controls if playing
+        if not self.media_player.is_playing():
+            return
+            
+        if not self.controls_visible:
+            return
+            
+        # Don't hide if mouse is over controls or sidebar is visible
+        mouse_pos = self.mapFromGlobal(self.cursor().pos())
+        if self.control_panel.geometry().contains(mouse_pos):
+            # Mouse is over controls, restart timer
+            self.mouse_move_timer.start()
+            return
+        
+        # Hide controls based on mode
+        if self.sidebar_visible:
+            # Don't hide menu/status when sidebar is visible, only control panel
+            self.control_panel.hide()
+        else:
+            # Hide everything for immersive experience
+            self.menuBar().hide()
             self.statusBar().hide()
+            self.control_panel.hide()
+        
+        self.controls_visible = False
+        # Hide cursor for immersive experience
+        self.setCursor(Qt.CursorShape.BlankCursor)
     
     def keyPressEvent(self, event):
         """Handle key press events"""
-        # ESC key exits fullscreen
+        # Show controls on any key press
+        self.show_controls()
+        self.mouse_move_timer.start()
+        
+        # ESC key exits fullscreen - ALWAYS prioritize this
         if event.key() == Qt.Key.Key_Escape:
             if self.isFullScreen():
                 self.toggle_fullscreen()
+                event.accept()  # Mark event as handled
+                return
         # F key toggles fullscreen
         elif event.key() == Qt.Key.Key_F:
             self.toggle_fullscreen()
+            event.accept()
+            return
         # Space bar plays/pauses
         elif event.key() == Qt.Key.Key_Space:
             self.play_pause()
-        else:
-            super().keyPressEvent(event)
+            event.accept()
+            return
+        # Menu key or Shift+F10 opens context menu
+        elif event.key() == Qt.Key.Key_Menu or (event.key() == Qt.Key.Key_F10 and event.modifiers() & Qt.KeyboardModifier.ShiftModifier):
+            # Show context menu at center of video frame
+            center = self.video_frame.rect().center()
+            self.show_video_context_menu(center)
+            event.accept()
+            return
+        
+        super().keyPressEvent(event)
+    
+    def eventFilter(self, obj, event):
+        """Global event filter to catch ESC key in fullscreen"""
+        if event.type() == event.Type.KeyPress:
+            if event.key() == Qt.Key.Key_Escape and self.isFullScreen():
+                self.toggle_fullscreen()
+                return True
+        return super().eventFilter(obj, event)
     
     def video_double_click(self, event):
         """Handle double-click on video frame to toggle fullscreen"""
         self.toggle_fullscreen()
     
     def show_video_context_menu(self, position):
-        """Show context menu on right-click"""
+        """Show comprehensive context menu on right-click"""
         menu = QMenu(self)
         menu.setStyleSheet("""
             QMenu {
                 background-color: #2d2d2d;
                 color: #cccccc;
                 border: 1px solid #3d3d3d;
+                padding: 5px;
+            }
+            QMenu::item {
+                padding: 5px 25px 5px 25px;
             }
             QMenu::item:selected {
                 background-color: #0e639c;
             }
+            QMenu::separator {
+                height: 1px;
+                background-color: #3d3d3d;
+                margin: 5px 0px;
+            }
         """)
+        
+        # File operations
+        open_action = menu.addAction("📁 Open Video...")
+        open_action.triggered.connect(self.open_file)
+        
+        menu.addSeparator()
         
         # Playback actions
         if self.media_player.is_playing():
@@ -1040,21 +1330,14 @@ class VideoPlayer(QMainWindow):
         
         menu.addSeparator()
         
-        # Settings shortcuts
-        sidebar_action = menu.addAction("🛠 Sidebar Settings")
-        sidebar_action.triggered.connect(self.ensure_sidebar_visible)
-
-        legacy_action = menu.addAction("⚙ Legacy Settings Dialog")
-        legacy_action.triggered.connect(self.show_subtitle_settings)
-
-        menu.addSeparator()
-
-        # Fullscreen
-        if self.isFullScreen():
-            fullscreen_action = menu.addAction("⊡ Exit Fullscreen")
-        else:
-            fullscreen_action = menu.addAction("⛶ Fullscreen")
-        fullscreen_action.triggered.connect(self.toggle_fullscreen)
+        # Seek controls
+        seek_forward_action = menu.addAction("⏩ Seek Forward 10s")
+        seek_forward_action.triggered.connect(self.seek_forward)
+        seek_forward_action.setEnabled(self.current_video is not None)
+        
+        seek_backward_action = menu.addAction("⏪ Seek Backward 10s")
+        seek_backward_action.triggered.connect(self.seek_backward)
+        seek_backward_action.setEnabled(self.current_video is not None)
         
         menu.addSeparator()
         
@@ -1071,10 +1354,10 @@ class VideoPlayer(QMainWindow):
         menu.addSeparator()
 
         # Playback speed controls
-        faster_action = menu.addAction("⏩ Speed +0.25x")
+        faster_action = menu.addAction("⚡ Speed +0.25x")
         faster_action.triggered.connect(lambda: self.adjust_playback_speed(0.25))
 
-        slower_action = menu.addAction("⏪ Speed -0.25x")
+        slower_action = menu.addAction("🐌 Speed -0.25x")
         slower_action.triggered.connect(lambda: self.adjust_playback_speed(-0.25))
 
         reset_speed_action = menu.addAction("⏯ Reset Speed (1.0x)")
@@ -1082,35 +1365,52 @@ class VideoPlayer(QMainWindow):
 
         menu.addSeparator()
 
+        # Subtitle actions
+        load_sub_action = menu.addAction("📄 Load Subtitle File...")
+        load_sub_action.triggered.connect(self.open_subtitle)
+        
+        download_sub_action = menu.addAction("⬇ Download Subtitles...")
+        download_sub_action.triggered.connect(self.show_subtitle_search)
+        download_sub_action.setEnabled(self.current_video is not None)
+        
+        ai_action = menu.addAction("🤖 Generate Subtitles (AI)...")
+        ai_action.triggered.connect(self.show_ai_subtitle_generator)
+        ai_action.setEnabled(self.current_video is not None)
+        
+        menu.addSeparator()
+        
+        # Settings
+        sidebar_action = menu.addAction("⚙ Settings Sidebar")
+        sidebar_action.triggered.connect(self.toggle_subtitle_sidebar)
+
+        legacy_action = menu.addAction("🔧 Legacy Settings Dialog...")
+        legacy_action.triggered.connect(self.show_subtitle_settings)
+
+        menu.addSeparator()
+        
         # Casting controls
         if self.casting_manager.is_casting:
-            stop_cast_action = menu.addAction("🛑 Stop Network Cast")
+            stop_cast_action = menu.addAction("� Stop Network Cast")
             stop_cast_action.triggered.connect(self.stop_network_cast)
             url = self.casting_manager.url or "(unknown)"
             url_action = menu.addAction(f"🔗 {url}")
             url_action.setEnabled(False)
         else:
-            start_cast_action = menu.addAction("🛰 Start Network Cast")
+            start_cast_action = menu.addAction("🛰 Start Network Cast...")
             start_cast_action.setEnabled(self.current_video is not None)
             start_cast_action.triggered.connect(self.start_network_cast)
+        
+        analytics_action = menu.addAction("📊 Streaming Analytics...")
+        analytics_action.triggered.connect(self.show_streaming_stats)
 
-        # Subtitle actions
-        load_sub_action = menu.addAction("📄 Load Subtitle File")
-        load_sub_action.triggered.connect(self.open_subtitle)
-        
-        download_sub_action = menu.addAction("⬇ Download Subtitles")
-        download_sub_action.triggered.connect(self.show_subtitle_search)
-        download_sub_action.setEnabled(self.current_video is not None)
-        
-        settings_action = menu.addAction("⚙ Subtitle Settings")
-        settings_action.triggered.connect(self.show_subtitle_settings)
-        
         menu.addSeparator()
-        
-        # AI Subtitle Generation
-        ai_action = menu.addAction("🤖 Generate Subtitles (AI)")
-        ai_action.triggered.connect(self.show_ai_subtitle_generator)
-        ai_action.setEnabled(self.current_video is not None)
+
+        # Fullscreen
+        if self.isFullScreen():
+            fullscreen_action = menu.addAction("⊡ Exit Fullscreen")
+        else:
+            fullscreen_action = menu.addAction("⛶ Fullscreen")
+        fullscreen_action.triggered.connect(self.toggle_fullscreen)
         
         # Show menu at cursor position
         menu.exec(self.video_frame.mapToGlobal(position))
@@ -1122,7 +1422,6 @@ class VideoPlayer(QMainWindow):
         else:
             self.sidebar_container.show()
             self.subtitle_sidebar.show()
-            self.toggle_sidebar_btn.setText("⬅ Hide Settings")
         self.update_subtitle_window_geometry()
 
     def adjust_volume(self, delta):
@@ -1297,20 +1596,72 @@ class VideoPlayer(QMainWindow):
             self.subtitle_sidebar.show()
             sidebar_width = max(320, int(self.width() * 0.28))
             self.splitter.setSizes([max(1, self.width() - sidebar_width), sidebar_width])
-            self.toggle_sidebar_btn.setText("⬅ Hide Settings")
             if self.subtitle_settings_dialog and self.subtitle_settings_dialog.isVisible():
                 self.subtitle_settings_dialog.reject()
         else:
             self.sidebar_container.hide()
             self.subtitle_sidebar.hide()
             self.splitter.setSizes([self.width(), 0])
-            self.toggle_sidebar_btn.setText("⚙ Settings Sidebar")
         self.update_subtitle_window_geometry()
     
     def on_sidebar_settings_changed(self, style):
         """Handle changes from subtitle settings sidebar"""
         self.subtitle_style = style
         self.subtitle_overlay.set_style(self.subtitle_style)
+    
+    def update_resource_monitor(self):
+        """Update resource usage display in status bar"""
+        try:
+            usage_str = self.resource_manager.get_resource_usage_string()
+            
+            # Add GPU info if available
+            if self.resource_manager.resources.use_gpu:
+                gpu_name = self.resource_manager.resources.gpu.name.split()[0]  # First word (e.g., "RTX")
+                usage_str = f"🚀 {gpu_name} | {usage_str}"
+            else:
+                usage_str = f"💻 CPU | {usage_str}"
+            
+            self.resource_monitor_label.setText(usage_str)
+        except Exception as e:
+            # Silently fail - resource monitoring is not critical
+            pass
+    
+    def on_task_indicator_clicked(self, task_id: str):
+        """Handle click on task indicator - restore associated dialog"""
+        task_info = self.task_manager.get_task_info(task_id)
+        if not task_info:
+            return
+        
+        from background_task_manager import TaskType
+        
+        # Try to restore the associated dialog
+        if task_info.task_type == TaskType.AI_GENERATION:
+            # Check if AI dialog exists and restore it
+            for widget in QApplication.topLevelWidgets():
+                if isinstance(widget, QDialog) and widget.windowTitle().startswith("AI Subtitle Generator"):
+                    if hasattr(widget, 'restore_from_background'):
+                        widget.restore_from_background()
+                        return
+        
+        # If dialog not found, show info
+        QMessageBox.information(
+            self,
+            "Background Task",
+            f"Task is running in background:\n{task_info.message}"
+        )
+    
+    def on_task_cancel_requested(self, task_id: str):
+        """Handle cancel request from status indicator"""
+        reply = QMessageBox.question(
+            self,
+            "Cancel Task?",
+            "Are you sure you want to cancel this task?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            self.task_manager.cancel_task(task_id)
     
     def show_subtitle_settings(self):
         """Show subtitle settings dialog"""
@@ -1322,7 +1673,6 @@ class VideoPlayer(QMainWindow):
             self.sidebar_container.hide()
             self.subtitle_sidebar.hide()
             self.splitter.setSizes([self.width(), 0])
-            self.toggle_sidebar_btn.setText("⚙ Settings Sidebar")
 
         # Get current subtitle file path
         subtitle_path = None
@@ -1371,21 +1721,20 @@ class VideoPlayer(QMainWindow):
             from ai_subtitle_dialog import AISubtitleDialog
             from ai_subtitle_generator import AISubtitleGenerator
             
-            dialog = AISubtitleDialog(self.current_video, self)
-            if dialog.exec():
-                segments = dialog.get_generated_segments()
-                if segments:
-                    # Save to SRT file
-                    subtitle_path = dialog.get_subtitle_path()
-                    generator = AISubtitleGenerator()
-                    if generator.save_to_srt(segments, subtitle_path):
-                        # Load the generated subtitle
-                        self.load_subtitle(subtitle_path)
-                        QMessageBox.information(
-                            self,
-                            "Success",
-                            f"AI-generated subtitles saved and loaded!\n{subtitle_path}"
-                        )
+            # Pass task_manager and resource_manager for background mode and optimization
+            dialog = AISubtitleDialog(self.current_video, self, self.task_manager)
+            
+            # Store dialog reference
+            self.current_ai_dialog = dialog
+            
+            # Connect to dialog events
+            dialog.finished.connect(lambda result: self.on_ai_dialog_finished(dialog, result))
+            dialog.minimized_to_background.connect(lambda: self.on_ai_dialog_minimized(dialog))
+            
+            # Show dialog
+            dialog.show()
+            dialog.raise_()
+            dialog.activateWindow()
         except ImportError as e:
             QMessageBox.warning(
                 self,
@@ -1395,6 +1744,122 @@ class VideoPlayer(QMainWindow):
                 "pip install openai-whisper torch\n\n"
                 "See Subtitles > Generate Subtitles (AI) for details."
             )
+    
+    def on_ai_dialog_finished(self, dialog, result):
+        """Handle AI dialog finished (accepted or rejected)"""
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        
+        print(f"\n[{timestamp}] === ON_AI_DIALOG_FINISHED CALLED ===")
+        print(f"  - Result: {result}")
+        print(f"  - Has segments: {dialog.generated_segments is not None}")
+        
+        if result and dialog.generated_segments:
+            from ai_subtitle_generator import AISubtitleGenerator
+            segments = dialog.get_generated_segments()
+            subtitle_path = dialog.get_subtitle_path()
+            generator = AISubtitleGenerator(resource_manager=self.resource_manager)
+            if generator.save_to_srt(segments, subtitle_path):
+                # Load the generated subtitle
+                self.load_subtitle(subtitle_path)
+                QMessageBox.information(
+                    self,
+                    "Success",
+                    f"AI-generated subtitles saved and loaded!\n{subtitle_path}"
+                )
+        
+        # Clean up
+        self.current_ai_dialog = None
+        print(f"[{timestamp}] === ON_AI_DIALOG_FINISHED COMPLETE ===\n")
+    
+    def on_ai_dialog_minimized(self, dialog):
+        """Handle AI dialog minimized to background"""
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        
+        print(f"\n[{timestamp}] === ON_AI_DIALOG_MINIMIZED CALLED ===")
+        print(f"  - Has is_minimized attr: {hasattr(dialog, 'is_minimized')}")
+        if hasattr(dialog, 'is_minimized'):
+            print(f"  - is_minimized value: {dialog.is_minimized}")
+        
+        # Store reference to dialog
+        self.minimized_ai_dialog = dialog
+        
+        # Create progress indicator if not exists
+        if not self.ai_progress_indicator:
+            print(f"  - Creating new progress indicator")
+            from simple_progress_indicator import SimpleProgressIndicator
+            # Create as floating widget without parent
+            self.ai_progress_indicator = SimpleProgressIndicator(None)
+            self.ai_progress_indicator.clicked.connect(self.restore_ai_dialog)
+            
+            # Position relative to main window
+            self.position_ai_progress_indicator()
+        
+        # Show indicator with initial status
+        print(f"  - Showing indicator")
+        self.ai_progress_indicator.update_status("0% - Initializing...")
+        self.ai_progress_indicator.start_animation()
+        self.ai_progress_indicator.show()
+        self.ai_progress_indicator.raise_()  # Bring to front
+        print(f"  - Indicator visible: {self.ai_progress_indicator.isVisible()}")
+        print(f"  - Indicator position: ({self.ai_progress_indicator.x()}, {self.ai_progress_indicator.y()})")
+        
+        # Connect to completion signal to hide indicator
+        if hasattr(dialog, 'gen_thread'):
+            dialog.gen_thread.finished.connect(self.on_ai_generation_finished)
+            print(f"  - Connected to gen_thread.finished")
+        
+        print(f"[{timestamp}] === ON_AI_DIALOG_MINIMIZED COMPLETE ===\n")
+    
+    def position_ai_progress_indicator(self):
+        """Position the AI progress indicator in top-right corner"""
+        if not self.ai_progress_indicator:
+            return
+        
+        # Get main window position and size
+        main_pos = self.pos()
+        main_width = self.width()
+        indicator_width = self.ai_progress_indicator.width()
+        indicator_height = self.ai_progress_indicator.height()
+        
+        # Position in top-right corner of main window (absolute screen coordinates)
+        x = main_pos.x() + main_width - indicator_width - 20
+        y = main_pos.y() + 80  # Below menu bar
+        
+        # Debug log
+        print(f"[POSITION] Main window pos: ({main_pos.x()}, {main_pos.y()})")
+        print(f"[POSITION] Main window size: {main_width}x{self.height()}")
+        print(f"[POSITION] Indicator size: {indicator_width}x{indicator_height}")
+        print(f"[POSITION] Setting absolute position to: ({x}, {y})")
+        
+        self.ai_progress_indicator.move(x, y)
+        
+        # Force update
+        self.ai_progress_indicator.update()
+        self.ai_progress_indicator.repaint()
+    
+    def restore_ai_dialog(self):
+        """Restore minimized AI dialog"""
+        if self.minimized_ai_dialog:
+            # Hide and stop indicator
+            if self.ai_progress_indicator:
+                self.ai_progress_indicator.stop_animation()
+                self.ai_progress_indicator.hide()
+            
+            # Show dialog again
+            self.minimized_ai_dialog.is_minimized = False
+            self.minimized_ai_dialog.show()
+            self.minimized_ai_dialog.raise_()
+            self.minimized_ai_dialog.activateWindow()
+    
+    def on_ai_generation_finished(self):
+        """Handle AI generation completion"""
+        if self.ai_progress_indicator:
+            self.ai_progress_indicator.stop_animation()
+            self.ai_progress_indicator.hide()
+        
+        self.minimized_ai_dialog = None
     
     def show_about(self):
         """Show about dialog"""
@@ -1441,21 +1906,105 @@ class VideoPlayer(QMainWindow):
         """Handle window resize"""
         super().resizeEvent(event)
         self.update_subtitle_window_geometry()
+        self.position_status_indicator()
+        self.position_ai_progress_indicator()
     
     def moveEvent(self, event):
         """Handle window move - keep subtitle window synchronized"""
         super().moveEvent(event)
         self.update_subtitle_window_geometry()
     
+    def position_status_indicator(self):
+        """Position status indicator widget in top-right corner"""
+        if self.status_indicator and self.video_frame:
+            # Get video frame geometry in window coordinates
+            frame_pos = self.video_frame.mapTo(self, self.video_frame.rect().topRight())
+            
+            # Position indicator 10px from top-right
+            indicator_x = frame_pos.x() - self.status_indicator.width() - 10
+            indicator_y = frame_pos.y() + 10
+            
+            self.status_indicator.move(indicator_x, indicator_y)
+    
     def closeEvent(self, event):
-        """Handle window close"""
-        self.media_player.stop()
-        self.timer.stop()
-        # Close subtitle window if it exists
-        if hasattr(self, 'subtitle_window'):
-            self.subtitle_window.close()
-        if hasattr(self, 'casting_manager'):
-            self.casting_manager.cleanup()
+        """Handle window close with proper cleanup to prevent memory leaks"""
+        try:
+            # Stop resource monitor timer
+            if hasattr(self, 'resource_monitor_timer') and self.resource_monitor_timer.isActive():
+                self.resource_monitor_timer.stop()
+            
+            # Cancel all background tasks
+            if hasattr(self, 'task_manager') and self.task_manager:
+                active_tasks = self.task_manager.get_active_tasks()
+                if active_tasks:
+                    reply = QMessageBox.question(
+                        self,
+                        "Background Tasks Running",
+                        f"{len(active_tasks)} background task(s) still running.\nCancel them and exit?",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                        QMessageBox.StandardButton.No
+                    )
+                    
+                    if reply == QMessageBox.StandardButton.No:
+                        event.ignore()
+                        return
+                    
+                    # Cancel all tasks
+                    for task_id in active_tasks:
+                        self.task_manager.cancel_task(task_id)
+            
+            # Stop all timers
+            if hasattr(self, 'timer') and self.timer.isActive():
+                self.timer.stop()
+            if hasattr(self, 'mouse_move_timer') and self.mouse_move_timer.isActive():
+                self.mouse_move_timer.stop()
+            
+            # Stop and release media player
+            if hasattr(self, 'media_player') and self.media_player:
+                self.media_player.stop()
+                self.media_player.release()
+            
+            # Release VLC instance
+            if hasattr(self, 'instance') and self.instance:
+                self.instance.release()
+            
+            # Stop network casting
+            if hasattr(self, 'casting_manager') and self.casting_manager:
+                if self.casting_manager.is_casting:
+                    self.casting_manager.stop()
+                self.casting_manager.cleanup()
+            
+            # Close subtitle window
+            if hasattr(self, 'subtitle_window') and self.subtitle_window:
+                self.subtitle_window.close()
+                self.subtitle_window.deleteLater()
+            
+            # Close dialogs
+            if hasattr(self, 'subtitle_settings_dialog') and self.subtitle_settings_dialog:
+                self.subtitle_settings_dialog.close()
+                self.subtitle_settings_dialog.deleteLater()
+            
+            if hasattr(self, 'streaming_stats_dialog') and self.streaming_stats_dialog:
+                self.streaming_stats_dialog.close()
+                self.streaming_stats_dialog.deleteLater()
+            
+            # Clear subtitle cache
+            if hasattr(self, 'current_subtitles'):
+                self.current_subtitles.clear()
+            
+            # Remove event filter
+            try:
+                QApplication.instance().removeEventFilter(self)
+            except:
+                pass
+            
+            # Force garbage collection
+            import gc
+            gc.collect()
+            
+        except Exception as e:
+            print(f"Warning: Error during cleanup: {e}")
+        
         event.accept()
 
 

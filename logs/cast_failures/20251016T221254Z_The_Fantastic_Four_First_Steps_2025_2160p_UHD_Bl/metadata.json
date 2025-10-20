@@ -1,0 +1,25 @@
+{
+  "reason": "http_server_exited",
+  "video_path": "/home/cmedeiros/Downloads/The.Fantastic.Four.First.Steps.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi.TrueHD.Atmos.H265-BEN.THE.MEN/The.Fantastic.Four.First.Steps.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi[Ben The Men].mkv",
+  "subtitle_path": "/home/cmedeiros/Downloads/The.Fantastic.Four.First.Steps.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi.TrueHD.Atmos.H265-BEN.THE.MEN/The.Fantastic.Four.First.Steps.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi[Ben The Men].pt-BR.srt",
+  "config": {
+    "host": "0.0.0.0",
+    "port": 8080,
+    "hls_time": 2,
+    "hls_list_size": 5,
+    "startup_timeout": 60,
+    "target_height": 1080,
+    "video_crf": 21,
+    "video_preset": "veryfast",
+    "video_profile": "high",
+    "video_level": "4.1",
+    "video_maxrate": "6000k",
+    "video_bufsize": "12000k",
+    "audio_bitrate": "192k",
+    "audio_channels": 2
+  },
+  "ffmpeg_return_code": null,
+  "http_return_code": 1,
+  "timestamp": "2025-10-16T22:12:54.288964+00:00",
+  "return_code": 1
+}

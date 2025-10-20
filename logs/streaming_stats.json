@@ -1,51 +1,105 @@
 {
   "totals": {
-    "events": 39,
-    "sample_autoplay_starts": 6,
-    "video_loads": 11,
-    "cast_starts": 9,
-    "autoplay_casts": 5,
-    "cast_stops": 5
+    "events": 167,
+    "sample_autoplay_starts": 17,
+    "video_loads": 49,
+    "cast_starts": 28,
+    "autoplay_casts": 16,
+    "cast_stops": 21
   },
   "videos": {
     "/home/cmedeiros/Documents/Cassiano-Portfolio/Subtitler-App/SubtitlePlayer/temp/sample.mp4": {
       "video_path": "/home/cmedeiros/Documents/Cassiano-Portfolio/Subtitler-App/SubtitlePlayer/temp/sample.mp4",
       "video_name": "sample.mp4",
-      "loads": 6,
-      "casts_started": 5,
-      "casts_stopped": 5,
-      "last_loaded_at": "2025-10-16T20:40:35.111080+00:00",
+      "loads": 17,
+      "casts_started": 16,
+      "casts_stopped": 16,
+      "last_loaded_at": "2025-10-20T03:00:07.607085+00:00",
       "last_source": "sample_autoplay",
       "loop_enabled": true,
-      "last_cast_started_at": "2025-10-16T20:19:58.392160+00:00",
+      "last_cast_started_at": "2025-10-20T03:00:18.701580+00:00",
       "last_cast_url": "http://10.0.0.59:8080/stream.m3u8",
       "last_cast_source": "sample_autoplay",
       "subtitle_on_cast": false,
-      "last_cast_stopped_at": "2025-10-16T20:20:12.368805+00:00",
-      "last_stop_reason": "video_changed"
+      "last_cast_stopped_at": "2025-10-20T03:07:52.697132+00:00",
+      "last_stop_reason": "user_requested"
     },
     "/home/cmedeiros/Downloads/The.Fantastic.Four.First.Steps.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi.TrueHD.Atmos.H265-BEN.THE.MEN/The.Fantastic.Four.First.Steps.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi[Ben The Men].mkv": {
       "video_path": "/home/cmedeiros/Downloads/The.Fantastic.Four.First.Steps.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi.TrueHD.Atmos.H265-BEN.THE.MEN/The.Fantastic.Four.First.Steps.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi[Ben The Men].mkv",
       "video_name": "The.Fantastic.Four.First.Steps.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi[Ben The Men].mkv",
-      "loads": 5,
-      "casts_started": 4,
-      "casts_stopped": 0,
-      "last_loaded_at": "2025-10-16T20:20:12.368350+00:00",
+      "loads": 18,
+      "casts_started": 9,
+      "casts_stopped": 3,
+      "last_loaded_at": "2025-10-20T03:22:51.656785+00:00",
       "last_source": "user",
       "loop_enabled": false,
-      "last_cast_started_at": "2025-10-16T20:20:41.119539+00:00",
+      "last_cast_started_at": "2025-10-16T22:13:27.367595+00:00",
       "last_cast_url": "http://10.0.0.59:8080/stream.m3u8",
       "last_cast_source": "user",
-      "subtitle_on_cast": true
+      "subtitle_on_cast": true,
+      "last_cast_stopped_at": "2025-10-16T22:22:14.060752+00:00",
+      "last_stop_reason": "video_changed"
+    },
+    "/home/cmedeiros/Videos/Superman.2025.En.1080p.X265.10.bit.Dolby.Digital.Plus[Multi-Sub]-SF.mkv": {
+      "video_path": "/home/cmedeiros/Videos/Superman.2025.En.1080p.X265.10.bit.Dolby.Digital.Plus[Multi-Sub]-SF.mkv",
+      "video_name": "Superman.2025.En.1080p.X265.10.bit.Dolby.Digital.Plus[Multi-Sub]-SF.mkv",
+      "loads": 1,
+      "casts_started": 2,
+      "casts_stopped": 1,
+      "last_loaded_at": "2025-10-16T22:22:14.060129+00:00",
+      "last_source": "user",
+      "loop_enabled": false,
+      "last_cast_started_at": "2025-10-16T22:51:27.195489+00:00",
+      "last_cast_url": "http://10.0.0.59:8080/stream.m3u8",
+      "last_cast_source": "user",
+      "subtitle_on_cast": true,
+      "last_cast_stopped_at": "2025-10-16T22:51:04.384568+00:00",
+      "last_stop_reason": "user_requested"
+    },
+    "/home/cmedeiros/Downloads/The.Conjuring.Last.Rites.2025.2160p.AMZN.WEB-DL.HDR10+.MULTi.DDP5.1.H265.MP4-BEN.THE.MEN/The.Conjuring.Last.Rites.2025.2160p.AMZN.WEB-DL.HDR10+.MULTi[Ben The Men].mp4": {
+      "video_path": "/home/cmedeiros/Downloads/The.Conjuring.Last.Rites.2025.2160p.AMZN.WEB-DL.HDR10+.MULTi.DDP5.1.H265.MP4-BEN.THE.MEN/The.Conjuring.Last.Rites.2025.2160p.AMZN.WEB-DL.HDR10+.MULTi[Ben The Men].mp4",
+      "video_name": "The.Conjuring.Last.Rites.2025.2160p.AMZN.WEB-DL.HDR10+.MULTi[Ben The Men].mp4",
+      "loads": 2,
+      "casts_started": 1,
+      "casts_stopped": 1,
+      "last_loaded_at": "2025-10-19T22:33:05.925041+00:00",
+      "last_source": "user",
+      "loop_enabled": false,
+      "last_cast_started_at": "2025-10-20T01:41:26.949134+00:00",
+      "last_cast_url": "http://10.0.0.59:8080/stream.m3u8",
+      "last_cast_source": "user",
+      "subtitle_on_cast": true,
+      "last_cast_stopped_at": "2025-10-20T01:42:13.245745+00:00",
+      "last_stop_reason": "user_requested"
+    },
+    "/home/cmedeiros/Downloads/Superman.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.ENG.LATINO.FRENCH.ITALIAN.GERMAN.HINDI.POLISH.RUSSIAN.TrueHD.Atmos.7.1.H265-BEN.THE.MEN/Superman.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi[Ben The Men].mkv": {
+      "video_path": "/home/cmedeiros/Downloads/Superman.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.ENG.LATINO.FRENCH.ITALIAN.GERMAN.HINDI.POLISH.RUSSIAN.TrueHD.Atmos.7.1.H265-BEN.THE.MEN/Superman.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi[Ben The Men].mkv",
+      "video_name": "Superman.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi[Ben The Men].mkv",
+      "loads": 1,
+      "casts_started": 0,
+      "casts_stopped": 0,
+      "last_loaded_at": "2025-10-20T14:20:05.614267+00:00",
+      "last_source": "user",
+      "loop_enabled": false
+    },
+    "/home/cmedeiros/Downloads/Weapons.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi.TrueHD.Atmos.7.1.H265-BEN.THE.MEN/Weapons.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi[Ben The Men].mkv": {
+      "video_path": "/home/cmedeiros/Downloads/Weapons.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi.TrueHD.Atmos.7.1.H265-BEN.THE.MEN/Weapons.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi[Ben The Men].mkv",
+      "video_name": "Weapons.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi[Ben The Men].mkv",
+      "loads": 10,
+      "casts_started": 0,
+      "casts_stopped": 0,
+      "last_loaded_at": "2025-10-20T17:03:31.479966+00:00",
+      "last_source": "user",
+      "loop_enabled": false
     }
   },
   "video_sources": {
-    "sample_autoplay": 6,
-    "user": 5
+    "sample_autoplay": 17,
+    "user": 32
   },
   "cast_sources": {
-    "sample_autoplay": 5,
-    "user": 4
+    "sample_autoplay": 16,
+    "user": 12
   },
   "sessions": {
     "0ecb2362-bfc4-4a82-a715-73de760477c6": {
@@ -107,6 +161,311 @@
       "cast_stops": 0,
       "autoplay_starts": 1,
       "last_event_at": "2025-10-16T20:40:35.111080+00:00"
+    },
+    "18cf38f5-18d0-4d3c-9a7a-17908aa692ba": {
+      "session_id": "18cf38f5-18d0-4d3c-9a7a-17908aa692ba",
+      "started_at": "2025-10-16T20:44:25.546727+00:00",
+      "events": 7,
+      "video_loads": 2,
+      "cast_starts": 2,
+      "cast_stops": 1,
+      "autoplay_starts": 2,
+      "last_event_at": "2025-10-16T20:45:43.912287+00:00"
+    },
+    "3171931a-bba9-464f-9ffd-a53ae4aec62c": {
+      "session_id": "3171931a-bba9-464f-9ffd-a53ae4aec62c",
+      "started_at": "2025-10-16T21:24:48.604599+00:00",
+      "events": 12,
+      "video_loads": 3,
+      "cast_starts": 2,
+      "cast_stops": 2,
+      "autoplay_starts": 2,
+      "last_event_at": "2025-10-16T21:37:05.621355+00:00"
+    },
+    "35040d34-9651-4136-8824-31c8cbcb88de": {
+      "session_id": "35040d34-9651-4136-8824-31c8cbcb88de",
+      "started_at": "2025-10-16T21:40:41.865027+00:00",
+      "events": 7,
+      "video_loads": 2,
+      "cast_starts": 2,
+      "cast_stops": 1,
+      "autoplay_starts": 2,
+      "last_event_at": "2025-10-16T21:41:53.670544+00:00"
+    },
+    "cad48424-be9e-43e0-8cb3-731fe144cc30": {
+      "session_id": "cad48424-be9e-43e0-8cb3-731fe144cc30",
+      "started_at": "2025-10-16T21:44:05.845286+00:00",
+      "events": 6,
+      "video_loads": 2,
+      "cast_starts": 1,
+      "cast_stops": 1,
+      "autoplay_starts": 2,
+      "last_event_at": "2025-10-16T21:44:25.283631+00:00"
+    },
+    "915932ec-9f76-45df-b6db-178ba459cb39": {
+      "session_id": "915932ec-9f76-45df-b6db-178ba459cb39",
+      "started_at": "2025-10-16T21:44:50.754194+00:00",
+      "events": 7,
+      "video_loads": 2,
+      "cast_starts": 1,
+      "cast_stops": 1,
+      "autoplay_starts": 2,
+      "last_event_at": "2025-10-16T21:45:15.565106+00:00"
+    },
+    "210c5fe8-a097-46d4-8d84-7261cf920628": {
+      "session_id": "210c5fe8-a097-46d4-8d84-7261cf920628",
+      "started_at": "2025-10-16T21:46:21.991673+00:00",
+      "events": 6,
+      "video_loads": 2,
+      "cast_starts": 1,
+      "cast_stops": 1,
+      "autoplay_starts": 2,
+      "last_event_at": "2025-10-16T21:46:39.657484+00:00"
+    },
+    "6d96263e-7a0e-447f-82bf-69be7ed36b47": {
+      "session_id": "6d96263e-7a0e-447f-82bf-69be7ed36b47",
+      "started_at": "2025-10-16T21:47:51.144917+00:00",
+      "events": 7,
+      "video_loads": 2,
+      "cast_starts": 1,
+      "cast_stops": 1,
+      "autoplay_starts": 2,
+      "last_event_at": "2025-10-16T21:48:22.038687+00:00"
+    },
+    "121d8bfa-2cf0-416b-9694-daf8639f7a29": {
+      "session_id": "121d8bfa-2cf0-416b-9694-daf8639f7a29",
+      "started_at": "2025-10-16T21:49:31.177521+00:00",
+      "events": 22,
+      "video_loads": 3,
+      "cast_starts": 5,
+      "cast_stops": 4,
+      "autoplay_starts": 2,
+      "last_event_at": "2025-10-16T22:52:29.962253+00:00"
+    },
+    "80e2e694-e00f-494f-9b91-a039bab2d094": {
+      "session_id": "80e2e694-e00f-494f-9b91-a039bab2d094",
+      "started_at": "2025-10-19T22:24:51.246186+00:00",
+      "events": 6,
+      "video_loads": 2,
+      "cast_starts": 1,
+      "cast_stops": 1,
+      "autoplay_starts": 2,
+      "last_event_at": "2025-10-19T22:30:36.962875+00:00"
+    },
+    "328cb7cd-74d0-4c32-9dfa-2cef4eec026d": {
+      "session_id": "328cb7cd-74d0-4c32-9dfa-2cef4eec026d",
+      "started_at": "2025-10-19T22:32:38.281817+00:00",
+      "events": 11,
+      "video_loads": 2,
+      "cast_starts": 2,
+      "cast_stops": 2,
+      "autoplay_starts": 2,
+      "last_event_at": "2025-10-20T02:16:54.181877+00:00"
+    },
+    "e58b2f5c-7151-4bd9-b402-239e61cd077d": {
+      "session_id": "e58b2f5c-7151-4bd9-b402-239e61cd077d",
+      "started_at": "2025-10-20T03:00:07.356190+00:00",
+      "events": 4,
+      "video_loads": 1,
+      "cast_starts": 1,
+      "cast_stops": 1,
+      "autoplay_starts": 2,
+      "last_event_at": "2025-10-20T03:07:52.697132+00:00"
+    },
+    "b7133689-a813-4fa3-a147-9ff9332de69a": {
+      "session_id": "b7133689-a813-4fa3-a147-9ff9332de69a",
+      "started_at": "2025-10-20T03:10:37.069213+00:00",
+      "events": 0,
+      "video_loads": 0,
+      "cast_starts": 0,
+      "cast_stops": 0,
+      "autoplay_starts": 0
+    },
+    "09955a7e-2641-4112-ac2e-d07addc481ee": {
+      "session_id": "09955a7e-2641-4112-ac2e-d07addc481ee",
+      "started_at": "2025-10-20T03:10:51.929331+00:00",
+      "events": 2,
+      "video_loads": 1,
+      "cast_starts": 0,
+      "cast_stops": 0,
+      "autoplay_starts": 0,
+      "last_event_at": "2025-10-20T03:11:14.998702+00:00"
+    },
+    "dc14e235-81d2-4337-95b8-2ddbc13bc6df": {
+      "session_id": "dc14e235-81d2-4337-95b8-2ddbc13bc6df",
+      "started_at": "2025-10-20T03:15:58.645639+00:00",
+      "events": 2,
+      "video_loads": 1,
+      "cast_starts": 0,
+      "cast_stops": 0,
+      "autoplay_starts": 0,
+      "last_event_at": "2025-10-20T03:16:20.432947+00:00"
+    },
+    "b0f6de4e-15b3-43b0-b6d2-1cd92bdfed18": {
+      "session_id": "b0f6de4e-15b3-43b0-b6d2-1cd92bdfed18",
+      "started_at": "2025-10-20T03:19:52.315445+00:00",
+      "events": 2,
+      "video_loads": 1,
+      "cast_starts": 0,
+      "cast_stops": 0,
+      "autoplay_starts": 0,
+      "last_event_at": "2025-10-20T03:20:01.890016+00:00"
+    },
+    "e31414ce-6303-4659-98f1-8e93ea93bce9": {
+      "session_id": "e31414ce-6303-4659-98f1-8e93ea93bce9",
+      "started_at": "2025-10-20T03:22:34.807053+00:00",
+      "events": 2,
+      "video_loads": 1,
+      "cast_starts": 0,
+      "cast_stops": 0,
+      "autoplay_starts": 0,
+      "last_event_at": "2025-10-20T03:22:51.664552+00:00"
+    },
+    "5ea9ac1a-2270-4de0-9078-bfc7b0120c6d": {
+      "session_id": "5ea9ac1a-2270-4de0-9078-bfc7b0120c6d",
+      "started_at": "2025-10-20T03:25:15.981988+00:00",
+      "events": 0,
+      "video_loads": 0,
+      "cast_starts": 0,
+      "cast_stops": 0,
+      "autoplay_starts": 0
+    },
+    "7b4ca033-be13-4572-a1c1-ab2f7e86c0f8": {
+      "session_id": "7b4ca033-be13-4572-a1c1-ab2f7e86c0f8",
+      "started_at": "2025-10-20T14:18:28.933487+00:00",
+      "events": 5,
+      "video_loads": 1,
+      "cast_starts": 0,
+      "cast_stops": 0,
+      "autoplay_starts": 0,
+      "last_event_at": "2025-10-20T15:02:31.481468+00:00"
+    },
+    "6ed33acd-72dd-4a12-9acf-ea6bd2a3bb45": {
+      "session_id": "6ed33acd-72dd-4a12-9acf-ea6bd2a3bb45",
+      "started_at": "2025-10-20T15:21:36.158251+00:00",
+      "events": 2,
+      "video_loads": 1,
+      "cast_starts": 0,
+      "cast_stops": 0,
+      "autoplay_starts": 0,
+      "last_event_at": "2025-10-20T15:29:34.279850+00:00"
+    },
+    "6e258e53-5194-4fab-afe5-43631deb91d8": {
+      "session_id": "6e258e53-5194-4fab-afe5-43631deb91d8",
+      "started_at": "2025-10-20T15:45:48.697389+00:00",
+      "events": 0,
+      "video_loads": 0,
+      "cast_starts": 0,
+      "cast_stops": 0,
+      "autoplay_starts": 0
+    },
+    "e61115ff-9e29-48d1-8adb-9240bcb2f0e4": {
+      "session_id": "e61115ff-9e29-48d1-8adb-9240bcb2f0e4",
+      "started_at": "2025-10-20T15:47:30.959700+00:00",
+      "events": 0,
+      "video_loads": 0,
+      "cast_starts": 0,
+      "cast_stops": 0,
+      "autoplay_starts": 0
+    },
+    "3d4d61e1-dc30-495d-8aa1-913eb8ac4fbb": {
+      "session_id": "3d4d61e1-dc30-495d-8aa1-913eb8ac4fbb",
+      "started_at": "2025-10-20T15:51:02.884922+00:00",
+      "events": 2,
+      "video_loads": 1,
+      "cast_starts": 0,
+      "cast_stops": 0,
+      "autoplay_starts": 0,
+      "last_event_at": "2025-10-20T15:51:16.588933+00:00"
+    },
+    "1662a635-bd29-4699-a2c2-9b59a96e4cd4": {
+      "session_id": "1662a635-bd29-4699-a2c2-9b59a96e4cd4",
+      "started_at": "2025-10-20T15:52:54.850271+00:00",
+      "events": 2,
+      "video_loads": 1,
+      "cast_starts": 0,
+      "cast_stops": 0,
+      "autoplay_starts": 0,
+      "last_event_at": "2025-10-20T15:53:05.932869+00:00"
+    },
+    "0989c1f7-f5fc-41d0-9014-e20412ebd22d": {
+      "session_id": "0989c1f7-f5fc-41d0-9014-e20412ebd22d",
+      "started_at": "2025-10-20T16:03:41.140887+00:00",
+      "events": 2,
+      "video_loads": 1,
+      "cast_starts": 0,
+      "cast_stops": 0,
+      "autoplay_starts": 0,
+      "last_event_at": "2025-10-20T16:03:50.651232+00:00"
+    },
+    "f53d3493-0e6b-4156-99d2-1f2145eaca3e": {
+      "session_id": "f53d3493-0e6b-4156-99d2-1f2145eaca3e",
+      "started_at": "2025-10-20T16:10:51.896538+00:00",
+      "events": 0,
+      "video_loads": 0,
+      "cast_starts": 0,
+      "cast_stops": 0,
+      "autoplay_starts": 0
+    },
+    "4a9de9ea-5eea-4698-8581-2502d936e6ec": {
+      "session_id": "4a9de9ea-5eea-4698-8581-2502d936e6ec",
+      "started_at": "2025-10-20T16:13:56.728845+00:00",
+      "events": 2,
+      "video_loads": 1,
+      "cast_starts": 0,
+      "cast_stops": 0,
+      "autoplay_starts": 0,
+      "last_event_at": "2025-10-20T16:14:09.551394+00:00"
+    },
+    "2e1efb5c-9faa-45bd-9432-02644755052a": {
+      "session_id": "2e1efb5c-9faa-45bd-9432-02644755052a",
+      "started_at": "2025-10-20T16:24:17.361638+00:00",
+      "events": 2,
+      "video_loads": 1,
+      "cast_starts": 0,
+      "cast_stops": 0,
+      "autoplay_starts": 0,
+      "last_event_at": "2025-10-20T16:24:33.666422+00:00"
+    },
+    "00e2250a-79f4-446c-a073-b2c78393bcff": {
+      "session_id": "00e2250a-79f4-446c-a073-b2c78393bcff",
+      "started_at": "2025-10-20T16:32:33.714805+00:00",
+      "events": 2,
+      "video_loads": 1,
+      "cast_starts": 0,
+      "cast_stops": 0,
+      "autoplay_starts": 0,
+      "last_event_at": "2025-10-20T16:36:07.444343+00:00"
+    },
+    "7335c64c-197c-403a-a372-386ca7be6f32": {
+      "session_id": "7335c64c-197c-403a-a372-386ca7be6f32",
+      "started_at": "2025-10-20T16:41:05.700174+00:00",
+      "events": 2,
+      "video_loads": 1,
+      "cast_starts": 0,
+      "cast_stops": 0,
+      "autoplay_starts": 0,
+      "last_event_at": "2025-10-20T16:42:48.534506+00:00"
+    },
+    "774a0818-1011-4e36-ab7e-c8c2ca210217": {
+      "session_id": "774a0818-1011-4e36-ab7e-c8c2ca210217",
+      "started_at": "2025-10-20T16:47:47.111467+00:00",
+      "events": 2,
+      "video_loads": 1,
+      "cast_starts": 0,
+      "cast_stops": 0,
+      "autoplay_starts": 0,
+      "last_event_at": "2025-10-20T16:47:58.829070+00:00"
+    },
+    "d825778f-38a4-46ef-8a68-787de0c28722": {
+      "session_id": "d825778f-38a4-46ef-8a68-787de0c28722",
+      "started_at": "2025-10-20T17:03:13.647493+00:00",
+      "events": 2,
+      "video_loads": 1,
+      "cast_starts": 0,
+      "cast_stops": 0,
+      "autoplay_starts": 0,
+      "last_event_at": "2025-10-20T17:03:31.487053+00:00"
     }
   },
   "session_order": [
@@ -115,19 +474,50 @@
     "db737326-7856-420b-81c8-28e4291e64eb",
     "f9220d6c-f0a5-4b94-bb3f-46fb1ab5e205",
     "378a2775-1bd5-4f22-ae6a-831210fb39f4",
-    "c3e77a0b-9ca8-4ed5-af4f-29eb075aa124"
+    "c3e77a0b-9ca8-4ed5-af4f-29eb075aa124",
+    "18cf38f5-18d0-4d3c-9a7a-17908aa692ba",
+    "3171931a-bba9-464f-9ffd-a53ae4aec62c",
+    "35040d34-9651-4136-8824-31c8cbcb88de",
+    "cad48424-be9e-43e0-8cb3-731fe144cc30",
+    "915932ec-9f76-45df-b6db-178ba459cb39",
+    "210c5fe8-a097-46d4-8d84-7261cf920628",
+    "6d96263e-7a0e-447f-82bf-69be7ed36b47",
+    "121d8bfa-2cf0-416b-9694-daf8639f7a29",
+    "80e2e694-e00f-494f-9b91-a039bab2d094",
+    "328cb7cd-74d0-4c32-9dfa-2cef4eec026d",
+    "e58b2f5c-7151-4bd9-b402-239e61cd077d",
+    "b7133689-a813-4fa3-a147-9ff9332de69a",
+    "09955a7e-2641-4112-ac2e-d07addc481ee",
+    "dc14e235-81d2-4337-95b8-2ddbc13bc6df",
+    "b0f6de4e-15b3-43b0-b6d2-1cd92bdfed18",
+    "e31414ce-6303-4659-98f1-8e93ea93bce9",
+    "5ea9ac1a-2270-4de0-9078-bfc7b0120c6d",
+    "7b4ca033-be13-4572-a1c1-ab2f7e86c0f8",
+    "6ed33acd-72dd-4a12-9acf-ea6bd2a3bb45",
+    "6e258e53-5194-4fab-afe5-43631deb91d8",
+    "e61115ff-9e29-48d1-8adb-9240bcb2f0e4",
+    "3d4d61e1-dc30-495d-8aa1-913eb8ac4fbb",
+    "1662a635-bd29-4699-a2c2-9b59a96e4cd4",
+    "0989c1f7-f5fc-41d0-9014-e20412ebd22d",
+    "f53d3493-0e6b-4156-99d2-1f2145eaca3e",
+    "4a9de9ea-5eea-4698-8581-2502d936e6ec",
+    "2e1efb5c-9faa-45bd-9432-02644755052a",
+    "00e2250a-79f4-446c-a073-b2c78393bcff",
+    "7335c64c-197c-403a-a372-386ca7be6f32",
+    "774a0818-1011-4e36-ab7e-c8c2ca210217",
+    "d825778f-38a4-46ef-8a68-787de0c28722"
   ],
-  "last_session_started_at": "2025-10-16T20:40:34.873993+00:00",
+  "last_session_started_at": "2025-10-20T17:03:13.647493+00:00",
   "last_event": {
-    "timestamp": "2025-10-16T20:40:35.111080+00:00",
-    "session_id": "c3e77a0b-9ca8-4ed5-af4f-29eb075aa124",
-    "event": "video_loaded",
+    "timestamp": "2025-10-20T17:03:31.487053+00:00",
+    "session_id": "d825778f-38a4-46ef-8a68-787de0c28722",
+    "event": "subtitle_linked",
     "data": {
-      "video_path": "/home/cmedeiros/Documents/Cassiano-Portfolio/Subtitler-App/SubtitlePlayer/temp/sample.mp4",
-      "video_name": "sample.mp4",
-      "source": "sample_autoplay",
-      "loop": true
+      "video_path": "/home/cmedeiros/Downloads/Weapons.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi.TrueHD.Atmos.7.1.H265-BEN.THE.MEN/Weapons.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi[Ben The Men].mkv",
+      "video_name": "Weapons.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi[Ben The Men].mkv",
+      "subtitle_path": "/home/cmedeiros/Downloads/Weapons.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi.TrueHD.Atmos.7.1.H265-BEN.THE.MEN/Weapons.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi[Ben The Men].srt",
+      "subtitle_name": "Weapons.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi[Ben The Men].srt"
     }
   },
-  "last_updated_at": "2025-10-16T20:40:35.111080+00:00"
+  "last_updated_at": "2025-10-20T17:03:31.487053+00:00"
 }

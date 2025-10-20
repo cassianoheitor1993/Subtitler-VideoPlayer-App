@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import IO, Dict, Optional
 
+import logging
+logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LOG_ARCHIVE_DIR = PROJECT_ROOT / "logs" / "cast_failures"
@@ -44,9 +46,27 @@ class FFmpegCastingError(RuntimeError):
 
 
 class FFmpegCastingManager:
-    """Manage FFmpeg HLS stream output sessions."""
+    """Manage FFmpeg HLS stream output sessions with hardware acceleration."""
 
-    def __init__(self):
+    def __init__(self, resource_manager=None):
+        """
+        Initialize casting manager with hardware optimization
+        
+        Args:
+            resource_manager: Optional ResourceManager for hardware optimization
+        """
+        # Import here to avoid circular dependency
+        if resource_manager is None:
+            from resource_manager import get_resource_manager
+            resource_manager = get_resource_manager()
+        
+        self.resource_manager = resource_manager
+        self._ffmpeg_config = self.resource_manager.get_ffmpeg_config()
+        
+        logger.info(f"FFmpeg optimizer: codec={self._ffmpeg_config.get('video_codec', 'libx264')}, "
+                   f"threads={self._ffmpeg_config['threads']}, "
+                   f"preset={self._ffmpeg_config['preset']}")
+        
         self._ffmpeg_process: Optional[subprocess.Popen] = None
         self._http_server_process: Optional[subprocess.Popen] = None
         self._hls_dir: Optional[Path] = None
@@ -209,13 +229,22 @@ class FFmpegCastingManager:
             except Exception:
                 pass
 
-        # Start FFmpeg HLS encoder
+        # Start FFmpeg HLS encoder with hardware optimization
         ffmpeg_cmd = [
             "ffmpeg",
             "-re",  # Read input at native framerate
             "-stream_loop", "-1",  # Loop indefinitely
-            "-i", video_path,
         ]
+        
+        # Add hardware acceleration if available
+        hwaccel = self._ffmpeg_config.get('hwaccel')
+        if hwaccel:
+            ffmpeg_cmd.extend(["-hwaccel", hwaccel])
+            if hwaccel == "cuda":
+                ffmpeg_cmd.extend(["-hwaccel_output_format", "cuda"])
+                logger.info("Using NVIDIA CUDA hardware acceleration")
+        
+        ffmpeg_cmd.extend(["-i", video_path])
 
         video_filters: list[str] = []
         if subtitle_filter_arg:
@@ -226,10 +255,37 @@ class FFmpegCastingManager:
 
         video_filters.append("format=yuv420p")
 
+        # Hardware-accelerated video encoding
+        video_codec = self._ffmpeg_config.get('video_codec', 'libx264')
+        preset = self._ffmpeg_config.get('preset', cfg.video_preset)
+        threads = self._ffmpeg_config.get('threads', 0)
+        
         ffmpeg_cmd.extend([
             "-vf", ",".join(video_filters),
-            "-c:v", "libx264",
-            "-preset", cfg.video_preset,
+            "-c:v", video_codec,
+        ])
+        
+        # Preset settings depend on codec
+        if video_codec == "h264_nvenc":
+            # NVIDIA NVENC settings
+            ffmpeg_cmd.extend([
+                "-preset", self._ffmpeg_config.get('preset_nvenc', 'p4'),
+                "-rc", self._ffmpeg_config.get('rc', 'vbr'),
+                "-gpu", self._ffmpeg_config.get('gpu', '0'),
+            ])
+            logger.info(f"Using NVIDIA NVENC encoder (preset {self._ffmpeg_config.get('preset_nvenc', 'p4')})")
+        elif video_codec in ["h264_vaapi", "h264_videotoolbox"]:
+            # AMD or Apple hardware encoding
+            logger.info(f"Using {video_codec} hardware encoder")
+        else:
+            # Software encoding
+            ffmpeg_cmd.extend([
+                "-preset", preset,
+                "-threads", str(threads) if threads > 0 else "0",
+            ])
+            logger.info(f"Using software encoder with {threads if threads > 0 else 'auto'} threads, preset {preset}")
+        
+        ffmpeg_cmd.extend([
             "-crf", str(cfg.video_crf),
             "-profile:v", cfg.video_profile,
             "-level:v", cfg.video_level,
@@ -238,8 +294,10 @@ class FFmpegCastingManager:
 
         if cfg.video_maxrate:
             ffmpeg_cmd.extend(["-maxrate", cfg.video_maxrate])
-        if cfg.video_bufsize:
-            ffmpeg_cmd.extend(["-bufsize", cfg.video_bufsize])
+        
+        # Use optimized buffer size
+        buffer_size = self._ffmpeg_config.get('buffer_size', cfg.video_bufsize or "4M")
+        ffmpeg_cmd.extend(["-bufsize", buffer_size])
 
         ffmpeg_cmd.extend([
             "-c:a", "aac",
@@ -252,6 +310,8 @@ class FFmpegCastingManager:
             "-hls_segment_filename", str(self._hls_dir / "segment%03d.ts"),
             str(self._hls_dir / "stream.m3u8"),
         ])
+        
+        logger.info(f"FFmpeg command: {' '.join(ffmpeg_cmd)}")
 
         # For debugging, log FFmpeg output to a file
         ffmpeg_log = self._hls_dir / "ffmpeg.log"

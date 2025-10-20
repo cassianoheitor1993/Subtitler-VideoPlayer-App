@@ -1,6 +1,7 @@
 """
 AI Subtitle Generator Module
 Integrates open-source speech-to-text models for automatic subtitle generation
+Optimized for low-memory systems and CPU fallback
 
 Recommended Open Source Options:
 1. Whisper by OpenAI - Best overall accuracy
@@ -11,10 +12,14 @@ Recommended Open Source Options:
 
 import os
 import subprocess
+import gc
 from pathlib import Path
 from typing import Optional, List, Callable
 from dataclasses import dataclass
 import json
+
+import logging
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -29,6 +34,7 @@ class SubtitleSegment:
 class AISubtitleGenerator:
     """
     AI-powered subtitle generator using Whisper
+    Optimized for memory efficiency and CPU fallback
     
     Whisper is recommended because:
     - State-of-the-art accuracy
@@ -39,21 +45,42 @@ class AISubtitleGenerator:
     - Works offline after model download
     """
     
-    def __init__(self, model_size: str = "base"):
+    def __init__(self, model_size: str = "base", resource_manager=None):
         """
         Initialize AI subtitle generator
         
         Args:
             model_size: Whisper model size
-                - tiny: Fastest, least accurate (~1GB RAM)
-                - base: Good balance (~1GB RAM) [RECOMMENDED]
+                - tiny: Fastest, least accurate (~1GB RAM, CPU-friendly)
+                - base: Good balance (~1GB RAM) [RECOMMENDED for low-end hardware]
                 - small: Better accuracy (~2GB RAM)
                 - medium: High accuracy (~5GB RAM)
                 - large: Best accuracy (~10GB RAM)
+            resource_manager: Optional ResourceManager for hardware optimization
         """
-        self.model_size = model_size
+        # Import here to avoid circular dependency
+        if resource_manager is None:
+            from resource_manager import get_resource_manager
+            resource_manager = get_resource_manager()
+        
+        self.resource_manager = resource_manager
+        
+        # Auto-select model size based on hardware if using default
+        if model_size == "base":
+            recommended = self.resource_manager.get_recommended_model_size()
+            logger.info(f"Auto-selected model size '{recommended}' based on hardware")
+            self.model_size = recommended
+        else:
+            self.model_size = model_size
+        
         self.model = None
         self.model_loaded = False
+        self._whisper_config = self.resource_manager.get_whisper_config()
+        self._use_cpu = not self.resource_manager.resources.use_gpu
+        
+        logger.info(f"AI Generator initialized - Model: {self.model_size}, "
+                   f"Device: {self._whisper_config['device']}, "
+                   f"FP16: {self._whisper_config['fp16']}")
     
     def check_dependencies(self) -> dict:
         """
@@ -113,31 +140,86 @@ pip install openai-whisper torch torchvision torchaudio --index-url https://down
     
     def load_model(self, progress_callback: Optional[Callable] = None):
         """
-        Load Whisper model (downloads if needed)
+        Load Whisper model with hardware-optimized settings
         
         Args:
             progress_callback: Optional callback for download progress
+            
+        Returns:
+            True if successful, False otherwise
         """
         try:
             import whisper
+            import torch
             
             if progress_callback:
-                progress_callback("Loading Whisper model...", 0)
+                progress_callback("Checking hardware capabilities...", 0)
             
-            self.model = whisper.load_model(self.model_size)
+            device = self._whisper_config['device']
+            resources = self.resource_manager.resources
+            
+            # Inform user about hardware detection
+            if resources.use_gpu:
+                msg = f"🚀 GPU Acceleration: {resources.gpu.name} ({resources.gpu.memory_total}MB)"
+                if resources.use_fp16:
+                    msg += " + FP16 (2x faster!)"
+                if progress_callback:
+                    progress_callback(msg, 10)
+                logger.info(msg)
+            else:
+                msg = f"CPU Mode: {resources.cpu_count_physical} cores @ {resources.cpu_freq_max:.0f}MHz"
+                if progress_callback:
+                    progress_callback(msg, 10)
+                logger.info(msg)
+            
+            if progress_callback:
+                progress_callback(f"Loading Whisper '{self.model_size}' model...", 20)
+            
+            # Load model with explicit device
+            self.model = whisper.load_model(self.model_size, device=device)
             self.model_loaded = True
             
-            if progress_callback:
-                progress_callback("Model loaded successfully", 100)
+            # Optimize model for inference
+            self.model.eval()  # Set to evaluation mode
             
+            # Use FP16 if supported (2x faster on RTX GPUs)
+            if self._whisper_config['fp16'] and device == "cuda":
+                self.model.half()
+                logger.info("Model converted to FP16 for faster inference")
+            
+            # Force garbage collection after loading model
+            gc.collect()
+            if device == "cuda":
+                torch.cuda.empty_cache()
+            
+            if progress_callback:
+                progress_callback(f"✓ Model loaded successfully on {device.upper()}", 100)
+            
+            logger.info(f"Model loaded: {self.model_size} on {device}")
             return True
         except Exception as e:
-            print(f"Error loading model: {e}")
+            logger.error(f"Error loading model: {e}")
+            if progress_callback:
+                progress_callback(f"❌ Error loading model: {str(e)}", 0)
             return False
+    
+    def unload_model(self):
+        """Unload model to free memory"""
+        if self.model:
+            del self.model
+            self.model = None
+            self.model_loaded = False
+            gc.collect()
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except:
+                pass
     
     def extract_audio(self, video_path: str, output_audio: str) -> bool:
         """
-        Extract audio from video file
+        Extract audio from video file using efficient settings
         
         Args:
             video_path: Path to video file
@@ -152,8 +234,8 @@ pip install openai-whisper torch torchvision torchaudio --index-url https://down
                 '-i', video_path,
                 '-vn',  # No video
                 '-acodec', 'pcm_s16le',  # PCM audio
-                '-ar', '16000',  # 16kHz sample rate
-                '-ac', '1',  # Mono
+                '-ar', '16000',  # 16kHz sample rate (optimal for Whisper)
+                '-ac', '1',  # Mono (reduces memory usage)
                 '-y',  # Overwrite
                 output_audio
             ]
@@ -192,6 +274,7 @@ pip install openai-whisper torch torchvision torchaudio --index-url https://down
             if not self.load_model(progress_callback):
                 return None
         
+        audio_path = None
         try:
             # Extract audio from video
             import time
@@ -210,32 +293,58 @@ pip install openai-whisper torch torchvision torchaudio --index-url https://down
             if progress_callback:
                 progress_callback(f"✓ Audio extracted ({elapsed}s)", 20)
             
-            # Transcribe with Whisper
+            # Transcribe with Whisper - with hardware-optimized options
             if progress_callback:
                 import torch
-                device = "GPU (CUDA)" if torch.cuda.is_available() else "CPU"
-                progress_callback(f"🤖 Transcribing with Whisper ({self.model_size} model on {device})...", 30)
-                progress_callback("⏳ This may take a while, please be patient...", 35)
+                device_str = self._whisper_config['device'].upper()
+                if self.resource_manager.resources.use_gpu:
+                    gpu_name = self.resource_manager.resources.gpu.name
+                    progress_callback(f"🚀 Transcribing with {gpu_name} acceleration...", 30)
+                else:
+                    progress_callback(f"🤖 Transcribing on CPU ({self.resource_manager.resources.cpu_count_physical} cores)...", 30)
             
+            # Use optimized settings from ResourceManager
             options = {
                 'task': 'transcribe',
-                'verbose': False
+                'verbose': False,
+                'fp16': self._whisper_config['fp16'],
+                'beam_size': self._whisper_config['beam_size'],
+                'best_of': self._whisper_config['best_of'],
+                'condition_on_previous_text': self._whisper_config['condition_on_previous_text'],
+                'compression_ratio_threshold': self._whisper_config['compression_ratio_threshold'],
+                'no_speech_threshold': self._whisper_config['no_speech_threshold'],
             }
+            
+            # Add threads for CPU mode
+            if self._use_cpu and self._whisper_config['threads'] > 0:
+                options['threads'] = self._whisper_config['threads']
+                logger.info(f"Using {options['threads']} CPU threads for transcription")
+            
             if language:
                 options['language'] = language
+            
+            logger.info(f"Whisper options: {options}")
             
             transcribe_start = time.time()
             result = self.model.transcribe(str(audio_path), **options)
             transcribe_elapsed = int(time.time() - transcribe_start)
             
-            if progress_callback:
-                progress_callback(f"✓ Transcription complete ({transcribe_elapsed}s)", 70)
+            # Calculate speed metrics
+            video_duration = result.get('duration', 0) or (transcribe_elapsed * 2)  # Fallback estimate
+            speed_factor = video_duration / transcribe_elapsed if transcribe_elapsed > 0 else 0
             
-            # Clean up audio file
+            if progress_callback:
+                progress_callback(f"✓ Transcription complete ({transcribe_elapsed}s) - {speed_factor:.1f}x realtime", 70)
+            
+            logger.info(f"Transcription took {transcribe_elapsed}s for {video_duration:.1f}s video ({speed_factor:.1f}x realtime)")
+            
+            # Clean up audio file immediately to free disk space
             try:
-                os.remove(audio_path)
-            except:
-                pass
+                if audio_path and os.path.exists(audio_path):
+                    os.remove(audio_path)
+                    audio_path = None
+            except Exception as e:
+                print(f"Warning: Could not remove temp audio file: {e}")
             
             # Convert to subtitle segments
             if progress_callback:
@@ -250,16 +359,35 @@ pip install openai-whisper torch torchvision torchaudio --index-url https://down
                     confidence=segment.get('confidence', 0.0)
                 ))
             
+            # Clear result to free memory
+            del result
+            gc.collect()
+            
             if progress_callback:
-                progress_callback("Subtitles generated successfully!", 100)
+                progress_callback(f"✓ Generated {len(segments)} subtitle segments!", 100)
             
             return segments
             
         except Exception as e:
             print(f"Error generating subtitles: {e}")
             if progress_callback:
-                progress_callback(f"Error: {str(e)}", 0)
+                progress_callback(f"❌ Error: {str(e)}", 0)
             return None
+        finally:
+            # Ensure cleanup even if there's an error
+            try:
+                if audio_path and os.path.exists(audio_path):
+                    os.remove(audio_path)
+            except:
+                pass
+            # Force garbage collection
+            gc.collect()
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except:
+                pass
     
     def save_to_srt(self, segments: List[SubtitleSegment], output_path: str) -> bool:
         """

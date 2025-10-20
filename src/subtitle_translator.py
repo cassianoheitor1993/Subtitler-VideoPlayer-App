@@ -1,11 +1,25 @@
 #!/usr/bin/env python3
 """
 Subtitle Translation Module
-Handles subtitle translation to multiple languages using translation APIs
+Handles translation of subtitle files using various translation services
 """
+
+import srt
+import time
+from pathlib import Path
+from typing import Optional, Callable
+from datetime import timedelta
+import threading  # For thread-safe cache
+
+import logging
+logger = logging.getLogger(__name__)
+
+# Constants for file type checking
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB max file size
 
 import logging
 import time
+import gc
 from typing import List, Callable, Optional
 from dataclasses import dataclass
 
@@ -42,12 +56,43 @@ class SubtitleTranslator:
         "Korean": "ko",
         "Russian": "ru",
         "Arabic": "ar",
-        "Hindi": "hi"
+        "Hindi": "hi",
+        "Dutch": "nl",
+        "Polish": "pl",
+        "Turkish": "tr"
     }
     
-    def __init__(self):
-        """Initialize translator with available backend"""
+    def __init__(self, resource_manager=None):
+        """
+        Initialize translator with available backend and hardware optimization
+        
+        Args:
+            resource_manager: Optional ResourceManager for hardware optimization
+        """
+        # Import here to avoid circular dependency
+        if resource_manager is None:
+            from resource_manager import get_resource_manager
+            resource_manager = get_resource_manager()
+        
+        self.resource_manager = resource_manager
+        
+        # Get optimized translation config
+        translation_config = self.resource_manager.get_translation_config()
+        
+        # Rate limiting settings (optimized based on RAM)
+        self.MAX_CACHE_SIZE = translation_config['cache_size']
+        self.BATCH_SIZE = translation_config['batch_size']
+        self.RATE_LIMIT_DELAY = translation_config['rate_limit_delay']
+        
+        logger.info(f"Translation optimizer: batch_size={self.BATCH_SIZE}, "
+                   f"cache_size={self.MAX_CACHE_SIZE}, "
+                   f"rate_limit={self.RATE_LIMIT_DELAY}s")
+        
         self.translator = None
+        self.backend = None
+        self.cache = {}  # Translation cache for performance
+        self._cache_lock = threading.Lock()  # Thread-safe cache access
+        self._last_request_time = 0  # For rate limiting
         self.backend = None
         self.cache = {}  # Translation cache for performance
         
@@ -77,6 +122,33 @@ class SubtitleTranslator:
                 "Alternative (deprecated):\n"
                 "  pip install googletrans==4.0.0rc1"
             )
+    
+    def _manage_cache_size(self):
+        """Manage cache size to prevent memory bloat (thread-safe)"""
+        with self._cache_lock:
+            if len(self.cache) > self.MAX_CACHE_SIZE:
+                # Remove oldest 20% of entries (simple LRU approximation)
+                items_to_remove = len(self.cache) // 5
+                keys_to_remove = list(self.cache.keys())[:items_to_remove]
+                for key in keys_to_remove:
+                    del self.cache[key]
+                logger.info(f"Cache trimmed: removed {items_to_remove} old entries")
+                gc.collect()  # Force garbage collection after cleanup
+    
+    def _rate_limit(self):
+        """Apply rate limiting to avoid API throttling"""
+        current_time = time.time()
+        elapsed = current_time - self._last_request_time
+        if elapsed < self.RATE_LIMIT_DELAY:
+            time.sleep(self.RATE_LIMIT_DELAY - elapsed)
+        self._last_request_time = time.time()
+    
+    def clear_cache(self):
+        """Clear translation cache to free memory (thread-safe)"""
+        with self._cache_lock:
+            self.cache.clear()
+        gc.collect()
+        logger.info("Translation cache cleared")
     
     def translate_subtitles(
         self,
@@ -121,12 +193,13 @@ class SubtitleTranslator:
         to_translate = []
         cached_count = 0
         
-        for text in unique_texts.keys():
-            cache_key = cache_prefix + text
-            if cache_key not in self.cache:
-                to_translate.append(text)
-            else:
-                cached_count += 1
+        with self._cache_lock:
+            for text in unique_texts.keys():
+                cache_key = cache_prefix + text
+                if cache_key not in self.cache:
+                    to_translate.append(text)
+                else:
+                    cached_count += 1
         
         if cached_count > 0:
             logger.info(f"Cache hit: {cached_count}/{len(unique_texts)} texts (saving {cached_count * 0.5:.1f}s)")
@@ -143,10 +216,11 @@ class SubtitleTranslator:
                 total
             )
             
-            # Update cache
-            for original, translated in zip(to_translate, translations):
-                cache_key = cache_prefix + original
-                self.cache[cache_key] = translated
+            # Update cache (thread-safe)
+            with self._cache_lock:
+                for original, translated in zip(to_translate, translations):
+                    cache_key = cache_prefix + original
+                    self.cache[cache_key] = translated
         
         # Phase 4: Build translated subtitle list
         translated = []
@@ -165,10 +239,11 @@ class SubtitleTranslator:
                 progress_callback(f"Building subtitle {i+1}/{total}", percentage)
             
             try:
-                # Get translated text from cache
+                # Get translated text from cache (thread-safe)
                 text = subtitle.text.strip()
                 cache_key = cache_prefix + text
-                translated_text = self.cache.get(cache_key, text)
+                with self._cache_lock:
+                    translated_text = self.cache.get(cache_key, text)
                 
                 # Create translated subtitle object
                 # Preserve original timing and structure
@@ -282,10 +357,10 @@ class SubtitleTranslator:
         cancel_check: Optional[Callable[[], bool]] = None,
         unique_count: int = 0,
         total_subs: int = 0,
-        batch_size: int = 50
+        batch_size: int = None
     ) -> List[str]:
         """
-        Optimized batch translation with progress tracking
+        Optimized batch translation with progress tracking and memory management
         
         Args:
             texts: List of unique texts to translate
@@ -294,11 +369,14 @@ class SubtitleTranslator:
             cancel_check: Cancellation check function
             unique_count: Total unique texts (for progress)
             total_subs: Total subtitle count (for context)
-            batch_size: Number of texts per batch
+            batch_size: Number of texts per batch (default: self.BATCH_SIZE)
             
         Returns:
             List of translated texts (same order as input)
         """
+        if batch_size is None:
+            batch_size = self.BATCH_SIZE
+            
         results = []
         total = len(texts)
         
@@ -325,6 +403,9 @@ class SubtitleTranslator:
             
             logger.debug(f"Translating batch {batch_num}/{total_batches}: {len(batch)} texts")
             
+            # Apply rate limiting before each batch
+            self._rate_limit()
+            
             try:
                 # Try batch translation first
                 if self.backend == "googletrans" and len(batch) > 1:
@@ -342,6 +423,11 @@ class SubtitleTranslator:
                         
                         results.extend(translated_batch)
                         logger.debug(f"Batch {batch_num} completed successfully")
+                        
+                        # Manage cache size periodically
+                        if batch_num % 10 == 0:
+                            self._manage_cache_size()
+                        
                         continue  # Success, move to next batch
                         
                     except Exception as e:
@@ -352,6 +438,7 @@ class SubtitleTranslator:
                 logger.debug(f"Using individual translation for batch {batch_num}")
                 for text in batch:
                     try:
+                        self._rate_limit()  # Rate limit each individual request
                         translated = self._translate_text(text, lang_code)
                         results.append(translated)
                     except Exception as e:

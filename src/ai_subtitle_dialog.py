@@ -10,7 +10,8 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 
 from ai_subtitle_generator import AISubtitleGenerator, SubtitleSegment
-from typing import List
+from background_task_manager import BackgroundTaskManager, TaskType
+from typing import List, Optional
 
 
 class AIGenerationThread(QThread):
@@ -54,6 +55,9 @@ class AIGenerationThread(QThread):
 class AISubtitleDialog(QDialog):
     """Dialog for AI-powered subtitle generation"""
     
+    # Custom signal for when dialog is minimized to background
+    minimized_to_background = pyqtSignal()
+    
     LANGUAGES = {
         "Auto-detect": "auto",
         "English": "en",
@@ -81,11 +85,15 @@ class AISubtitleDialog(QDialog):
         "Large (Best Quality, 10GB RAM)": "large"
     }
     
-    def __init__(self, video_path, parent=None):
+    def __init__(self, video_path, parent=None, task_manager: Optional[BackgroundTaskManager] = None):
         super().__init__(parent)
         self.video_path = video_path
         self.generated_segments = None
         self.generator = AISubtitleGenerator()
+        self.task_manager = task_manager
+        self.current_task_id = None
+        self.minimized = False  # Track if dialog is running in background
+        self.is_minimized = False  # Alias for video_player compatibility
         
         self.init_ui()
         self.check_dependencies()
@@ -93,7 +101,8 @@ class AISubtitleDialog(QDialog):
     def init_ui(self):
         """Initialize user interface"""
         self.setWindowTitle("AI Subtitle Generator - Powered by Whisper")
-        self.setModal(True)
+        self.setModal(False)  # Non-modal to allow minimize
+        self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.WindowMinimizeButtonHint | Qt.WindowType.WindowMaximizeButtonHint | Qt.WindowType.WindowCloseButtonHint)
         self.resize(700, 600)
         
         layout = QVBoxLayout()
@@ -196,6 +205,13 @@ class AISubtitleDialog(QDialog):
         button_layout.addWidget(self.install_btn)
         
         button_layout.addStretch()
+        
+        # Minimize button (only if task_manager available)
+        self.minimize_btn = QPushButton("⬇ Minimize")
+        self.minimize_btn.clicked.connect(self.minimize_to_background)
+        self.minimize_btn.setVisible(False)  # Hidden by default
+        self.minimize_btn.setToolTip("Continue in background while you watch the video")
+        button_layout.addWidget(self.minimize_btn)
         
         self.generate_btn = QPushButton("Generate Subtitles")
         self.generate_btn.clicked.connect(self.start_generation)
@@ -314,21 +330,44 @@ class AISubtitleDialog(QDialog):
         self.progress_bar.setValue(0)
         self.status_label.setText("Initializing...")
         
+        # Always show minimize button during generation
+        self.minimize_btn.setVisible(True)
+        
         # Start generation thread
+        print(f"[START_GEN] Creating AIGenerationThread")
         self.gen_thread = AIGenerationThread(
             self.video_path,
             language,
             model_size
         )
+        print(f"[START_GEN] Thread created: {self.gen_thread}")
+        print(f"[START_GEN] Has gen_thread: {hasattr(self, 'gen_thread')}")
+        
         self.gen_thread.progress_update.connect(self.on_progress)
         self.gen_thread.generation_complete.connect(self.on_complete)
         self.gen_thread.generation_failed.connect(self.on_error)
         self.gen_thread.start()
+        
+        print(f"[START_GEN] Thread started. Running: {self.gen_thread.isRunning()}")
+
     
     def on_progress(self, message, percent):
         """Handle progress update"""
         self.status_label.setText(message)
         self.progress_bar.setValue(percent)
+        
+        # Update progress indicator if minimized
+        if self.minimized and self.parent():
+            print(f"[PROGRESS] Minimized - updating indicator: {percent}% - {message}")
+            try:
+                if hasattr(self.parent(), 'ai_progress_indicator') and self.parent().ai_progress_indicator:
+                    # Format: "Processing: 45% - Step 23/50"
+                    self.parent().ai_progress_indicator.update_status(f"{percent}% - {message}")
+                    print(f"[PROGRESS] Indicator updated successfully")
+                else:
+                    print(f"[PROGRESS] No indicator found on parent")
+            except Exception as e:
+                print(f"[PROGRESS] Error updating indicator: {e}")
         
         # Add to log with timestamp
         from datetime import datetime
@@ -349,6 +388,20 @@ class AISubtitleDialog(QDialog):
         timestamp = datetime.now().strftime("%H:%M:%S")
         self.log_text.append(f"[{timestamp}] ✓ Generation complete! {len(segments)} segments created")
         
+        # If minimized, restore and notify
+        if self.minimized:
+            self.restore_from_background()
+            if self.parent():
+                try:
+                    from PyQt6.QtWidgets import QMessageBox
+                    QMessageBox.information(
+                        self.parent(),
+                        "AI Generation Complete",
+                        f"✓ Successfully generated {len(segments)} subtitle segments!"
+                    )
+                except:
+                    pass
+        
         # Show preview
         preview_text = ""
         for i, segment in enumerate(segments[:10], 1):
@@ -361,10 +414,11 @@ class AISubtitleDialog(QDialog):
         
         self.preview_text.setText(preview_text)
         
-        # Enable save button
+        # Enable save button and hide minimize button
         self.save_btn.setEnabled(True)
         self.generate_btn.setEnabled(True)
         self.close_btn.setEnabled(True)
+        self.minimize_btn.setVisible(False)
         
         self.status_label.setText(f"✓ Generated {len(segments)} subtitle segments!")
     
@@ -375,10 +429,16 @@ class AISubtitleDialog(QDialog):
         timestamp = datetime.now().strftime("%H:%M:%S")
         self.log_text.append(f"[{timestamp}] ❌ ERROR: {error}")
         
+        # If minimized, restore and notify
+        if self.minimized:
+            self.restore_from_background()
+        
         self.status_label.setText(f"Error: {error}")
         self.generate_btn.setEnabled(True)
         self.close_btn.setEnabled(True)
+        self.minimize_btn.setVisible(False)
         
+        from PyQt6.QtWidgets import QMessageBox
         QMessageBox.critical(
             self,
             "Generation Failed",
@@ -400,3 +460,185 @@ class AISubtitleDialog(QDialog):
         from pathlib import Path
         video_path = Path(self.video_path)
         return str(video_path.with_suffix('.srt'))
+    
+    def minimize_to_background(self):
+        """Minimize dialog and continue in background"""
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        
+        print(f"\n[{timestamp}] === MINIMIZE_TO_BACKGROUND CALLED ===")
+        print(f"  - Has gen_thread: {hasattr(self, 'gen_thread')}")
+        
+        # Check if generation is running
+        if not hasattr(self, 'gen_thread') or not self.gen_thread.isRunning():
+            print(f"  - Generation NOT running - aborting minimize")
+            return
+        
+        print(f"  - Generation IS running - proceeding with minimize")
+        
+        self.minimized = True
+        self.is_minimized = True  # Also set alias for video_player
+        
+        print(f"  - Set minimized flags to True")
+        
+        # Log the minimization
+        self.log_text.append(f"[{timestamp}] ⬇ Minimized - continuing in background...")
+        
+        # Notify parent (video player) to show status
+        if self.parent():
+            print(f"  - Has parent, notifying...")
+            try:
+                from pathlib import Path
+                video_name = Path(self.video_path).name
+                self.parent().statusBar().showMessage(f"🤖 AI generation running in background: {video_name}", 5000)
+            except Exception as e:
+                print(f"  - Error notifying parent: {e}")
+        
+        # Hide the dialog but keep it alive
+        print(f"  - Hiding dialog...")
+        self.hide()
+        print(f"  - Dialog hidden. isVisible: {self.isVisible()}")
+        
+        # Emit signal for parent to show indicator
+        print(f"  - Emitting minimized_to_background signal")
+        self.minimized_to_background.emit()
+        
+        print(f"[{timestamp}] === MINIMIZE_TO_BACKGROUND COMPLETE ===\n")
+    
+    def restore_from_background(self):
+        """Restore dialog from background"""
+        self.minimized = False
+        self.is_minimized = False  # Also reset alias
+        self.show()
+        self.raise_()
+        self.activateWindow()
+        
+        # Clear status bar message
+        if self.parent():
+            try:
+                self.parent().statusBar().showMessage("Ready")
+            except:
+                pass
+    
+    def _run_in_background(self, progress_callback, cancel_check):
+        """Execute generation in background (for BackgroundTaskManager)"""
+        try:
+            language = self.language_combo.currentData()
+            model_size = self.model_combo.currentData()
+            
+            generator = AISubtitleGenerator(model_size)
+            
+            # Adapt progress callback for BackgroundTaskManager
+            def adapted_progress(message, percent):
+                if cancel_check():
+                    raise InterruptedError("Task cancelled by user")
+                progress_callback(message, percent)
+                # Also update UI if dialog is visible
+                if not self.minimized:
+                    self.on_progress(message, percent)
+            
+            # Generate subtitles
+            segments = generator.generate_subtitles(
+                self.video_path,
+                language if language != "auto" else None,
+                adapted_progress
+            )
+            
+            return segments
+            
+        except InterruptedError:
+            raise
+        except Exception as e:
+            raise RuntimeError(f"AI generation failed: {str(e)}")
+    
+    def _on_background_complete(self, result):
+        """Handle background task completion"""
+        self.generated_segments = result
+        
+        # Update UI
+        if not self.minimized:
+            self.on_complete(result)
+        else:
+            # If minimized, just enable the save button for when user returns
+            self.save_btn.setEnabled(True)
+        
+        # Show notification
+        if self.parent():
+            # Parent will show notification via StatusIndicatorWidget
+            pass
+    
+    def _on_background_error(self, error):
+        """Handle background task error"""
+        if not self.minimized:
+            self.on_error(str(error))
+        else:
+            # Log error even if minimized
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            self.log_text.append(f"[{timestamp}] ❌ Background error: {error}")
+    
+    def changeEvent(self, event):
+        """Handle window state changes - catch minimize from native button"""
+        from PyQt6.QtCore import QEvent, Qt
+        from PyQt6.QtWidgets import QApplication
+        from datetime import datetime
+        
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        
+        # Debug ALL change events
+        print(f"[{timestamp}] changeEvent triggered: {event.type()}")
+        
+        # Debug logging
+        if event.type() == QEvent.Type.WindowStateChange:
+            print(f"[{timestamp}] Window state changed")
+            print(f"  - Current state: {self.windowState()}")
+            print(f"  - Is minimized: {bool(self.windowState() & Qt.WindowState.WindowMinimized)}")
+            print(f"  - Has gen_thread: {hasattr(self, 'gen_thread')}")
+            if hasattr(self, 'gen_thread'):
+                print(f"  - Thread running: {self.gen_thread.isRunning()}")
+            
+            # Check if window was minimized using native button
+            if self.windowState() & Qt.WindowState.WindowMinimized:
+                print(f"[{timestamp}] Native minimize detected!")
+                # If generation is running, minimize to background instead
+                if hasattr(self, 'gen_thread') and self.gen_thread.isRunning():
+                    print(f"[{timestamp}] Generation running - converting to background minimize")
+                    event.ignore()
+                    # Restore window state to normal first
+                    self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized)
+                    # Then minimize to background
+                    self.minimize_to_background()
+                    return
+                else:
+                    print(f"[{timestamp}] No generation running - allowing normal minimize")
+        
+        super().changeEvent(event)
+    
+    def closeEvent(self, event):
+        """Handle dialog close - ask to cancel if generation is running"""
+        # Check if generation thread is actually running
+        if hasattr(self, 'gen_thread') and self.gen_thread.isRunning():
+            from PyQt6.QtWidgets import QMessageBox
+            reply = QMessageBox.question(
+                self,
+                "Cancel Generation?",
+                "AI subtitle generation is still running. Cancel it?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                # Stop the thread
+                try:
+                    self.gen_thread.terminate()
+                    self.gen_thread.wait()
+                except:
+                    pass
+                event.accept()
+            else:
+                # Don't close, just minimize to background
+                event.ignore()
+                self.minimize_to_background()
+                return
+        
+        super().closeEvent(event)
