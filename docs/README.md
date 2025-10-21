@@ -14,6 +14,7 @@ Welcome to the SubtitlePlayer documentation! This directory contains comprehensi
 - **[HLS Streaming](features/STREAMING_FIX_COMPLETE.md)** - Network casting and HLS streaming
 - **[AI Subtitle Generation](../README.md#ai-subtitle-generation)** - Whisper AI integration
 - **[Translation System](features/TRANSLATION_FILE_BASED.md)** - Multi-language subtitle translation
+- **[Stats Footer Dashboard](features/STATS_FOOTER.md)** - Background task monitoring and controls
 - **[Progress Indicators](features/PROGRESS_BAR_SUMMARY.md)** - Translation progress visualization
 - **[Subtitle Display](features/SUBTITLE_DISPLAY_FIX.md)** - Rendering and styling improvements
 - **[Loading Optimizations](features/SUBTITLE_LOADING_IMPROVEMENTS.md)** - Performance enhancements

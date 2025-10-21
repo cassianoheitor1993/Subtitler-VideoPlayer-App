@@ -38,14 +38,23 @@ A professional, feature-rich video player for Linux with intelligent subtitle ma
 - **18+ Languages**: English, Portuguese, Spanish, Chinese, French, German, and more
 - **File-based**: Creates new subtitle files (e.g., `movie.pt-BR.srt`)
 - **Progress Visualization**: Real-time progress bar with percentage
-- **Cancelable**: Stop translation at any time
+- **Cancelable**: Stop translation at any time (UI awaits safe shutdown if you close mid-process)
+- **Background Friendly**: Minimize the dialog and monitor progress from the status footer
 - **Batch Processing**: Translate entire subtitle files efficiently
+
+### 📊 Status Footer Dashboard
+- **Inline Task Monitor**: Background AI, translation, and casting tasks appear as chips in the status bar
+- **One-click Restore**: Reopen background dialogs (AI generator, translation, analytics) directly from the footer
+- **Quick Cancel**: Stop long-running jobs without reopening the original window
+- **Auto-cleanup**: Completed tasks fade out automatically to keep the UI tidy
 
 ### 🛰️ Network Streaming (Beta)
 - **HLS Streaming**: Cast video + subtitles to other devices
 - **Cross-platform**: Works with Android, iOS, browsers, smart TVs
 - **1080p Quality**: H.264 High Profile with AAC audio
 - **Subtitle Burn-in**: Optional subtitle embedding in stream
+
+- **Low Latency**: Configurable segment duration for responsiveness
 - **Low Latency**: Configurable segment duration for responsiveness
 
 ### ⌨️ Keyboard Shortcuts
@@ -126,7 +135,18 @@ python3 main.py
    - **AI Generate**: Subtitle → Generate with AI
 3. **Customize**: View → Subtitle Settings (modern sidebar or legacy dialog)
 4. **Translate**: Subtitle → Translate Subtitles
+   - Minimize the legacy dialog to keep working and use the status footer chip to reopen or cancel
 5. **Cast**: Cast → Start HTTP Cast (stream to other devices)
+
+#### Translation Tips
+- The dialog can be closed safely once the footer chip shows completion; closing mid-process will ask to cancel first.
+- If you confirm cancellation, the dialog hides until the translator shuts down gracefully.
+- Partial results can be saved when cancellations occur—the footer message reflects success or failure.
+
+#### AI Subtitle Generation
+- Use the “⬇ Minimize” button to run Whisper in the background while you keep browsing videos.
+- The `🤖` chip in the status footer shows live progress and provides reopen/cancel shortcuts.
+- Completed jobs remain accessible from the chip until you dismiss or reopen the dialog.
 
 ### Network Casting
 

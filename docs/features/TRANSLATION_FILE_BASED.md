@@ -136,6 +136,11 @@ Translated files saved in same directory as original:
 ### 4. Load Translated Subtitles
 After translation, click "Yes" to instantly switch to translated version, or manually load later via File → Load Subtitle.
 
+### 5. Background-Friendly Experience
+- **Status Footer Integration**: Progress, cancel, and reopen controls surface in the status bar while translations run.
+- **Safe Close Handling**: Attempting to close the dialog mid-translation prompts you to cancel; the window hides and waits for a clean shutdown before exiting.
+- **Partial Saves**: If you cancel after partial work, the dialog offers to keep the translated portion and the footer message reflects the outcome.
+
 ---
 
 ## 🔧 Technical Implementation

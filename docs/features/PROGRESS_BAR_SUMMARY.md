@@ -42,11 +42,11 @@ Status: 🔄 Translating subtitle 235/500...
 
 ### New Widget
 ```python
-self.translation_progress = QProgressBar()
-self.translation_progress.setVisible(False)  # Hidden by default
-self.translation_progress.setMinimum(0)
-self.translation_progress.setMaximum(100)
-self.translation_progress.setTextVisible(True)
+self.translation_progress_bar = QProgressBar()
+self.translation_progress_bar.setVisible(False)  # Hidden by default
+self.translation_progress_bar.setMinimum(0)
+self.translation_progress_bar.setMaximum(100)
+self.translation_progress_bar.setTextVisible(True)
 ```
 
 ### Styling
@@ -59,7 +59,7 @@ self.translation_progress.setTextVisible(True)
 ```python
 def update_progress(msg, pct):
     self.translation_status.setText(f"{msg}")
-    self.translation_progress.setValue(int(pct))
+    self.translation_progress_bar.setValue(int(pct))
     QApplication.processEvents()  # Keep UI responsive
 ```
 

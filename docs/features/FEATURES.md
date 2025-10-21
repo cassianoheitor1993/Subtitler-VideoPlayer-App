@@ -106,6 +106,7 @@
 - ✅ Timeline with precise scrubbing
 - ✅ Menu bar with organized actions
 - ✅ Status bar with current info
+- ✅ Stats footer chips for AI, translation, and casting status
 
 ### Dialogs
 - ✅ **Subtitle Search Dialog**:
@@ -127,6 +128,7 @@
 - ✅ Immediate visual feedback
 - ✅ Error handling with user-friendly messages
 - ✅ Progress indicators for long operations
+- ✅ Background task controls from the status footer (restore/cancel)
 - ✅ Modal dialogs prevent accidental actions
 
 ## Configuration & Data Management

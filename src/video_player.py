@@ -26,6 +26,8 @@ from subtitle_parser import SubtitleParser, SubtitleEntry
 from config_manager import ConfigManager, SubtitleStyle
 from ffmpeg_casting_manager import FFmpegCastingManager, FFmpegCastingError, FFmpegCastingConfig
 from streaming_stats_dialog import StreamingStatsDialog
+from background_task_manager import BackgroundTaskManager, TaskInfo, TaskStatus, TaskType
+from stats_footer import StatsFooter
 from debug_logger import debug_logger
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -229,21 +231,20 @@ class VideoPlayer(QMainWindow):
         self.playback_rate = 1.0
         self._sample_autoplayed = False
         
-        # Background task manager
-        from background_task_manager import BackgroundTaskManager
-        from status_indicator_widget import StatusIndicatorWidget
+        # Background task manager and status footer helpers
         self.task_manager = BackgroundTaskManager()
-        self.status_indicator = None  # Will be created after UI setup
-        
-        # Simple progress indicator for AI generation
-        from simple_progress_indicator import SimpleProgressIndicator
-        self.ai_progress_indicator = None  # Created when needed
+        self._task_clear_timers = {}
+        self._active_tasks_by_key = {}
+        self._task_key_lookup = {}
+        self.status_footer = None
+
+        # AI generation dialog references
         self.minimized_ai_dialog = None  # Reference to minimized dialog
-        
-        # Timer to keep indicator positioned
-        self.indicator_position_timer = QTimer(self)
-        self.indicator_position_timer.setInterval(100)  # Update every 100ms
-        self.indicator_position_timer.timeout.connect(self.position_ai_progress_indicator)
+        self.current_ai_dialog = None  # Reference to current AI dialog (visible or minimized)
+        self._ai_progress_slot = None  # Cached slot for thread progress updates
+
+        # Track active translation dialog for quick restore
+        self._active_translation_dialog = None
         
         # Auto-hide controls
         self.controls_visible = True
@@ -350,18 +351,6 @@ class VideoPlayer(QMainWindow):
 
         # Add splitter to main layout
         main_layout.addWidget(self.splitter, stretch=1)
-        
-        # Status indicator widget (floating in top-right corner)
-        from status_indicator_widget import StatusIndicatorWidget
-        self.status_indicator = StatusIndicatorWidget(self)
-        self.status_indicator.task_clicked.connect(self.on_task_indicator_clicked)
-        self.status_indicator.cancel_requested.connect(self.on_task_cancel_requested)
-        
-        # Connect task manager signals to status indicator
-        self.task_manager.task_started.connect(self.status_indicator.add_task)
-        self.task_manager.task_progress.connect(self.status_indicator.update_task)
-        self.task_manager.task_completed.connect(self.status_indicator.update_task)
-        self.task_manager.task_failed.connect(self.status_indicator.update_task)
 
         # Control panel
         self.control_panel = self.create_control_panel()
@@ -370,13 +359,12 @@ class VideoPlayer(QMainWindow):
         # Menu bar
         self.create_menu_bar()
         
-        # Status bar with resource monitoring
-        self.statusBar().showMessage("Ready - Open a video file to begin")
-        
-        # Cast status label
-        self.cast_status_label = QLabel("")
-        self.cast_status_label.setStyleSheet("color: #8cdaff;")
-        self.statusBar().addPermanentWidget(self.cast_status_label)
+        # Status footer within status bar
+        self.status_footer = StatsFooter(self.statusBar())
+        self.status_footer.action_requested.connect(self.on_stats_footer_action_requested)
+        self.status_footer.cancel_requested.connect(self.on_stats_footer_cancel_requested)
+        self.statusBar().addWidget(self.status_footer, 1)
+        self.status_footer.set_idle("Ready - Open a video file to begin")
         
         # Resource monitor label
         self.resource_monitor_label = QLabel("")
@@ -384,6 +372,12 @@ class VideoPlayer(QMainWindow):
         self.resource_monitor_label.setToolTip("System resource usage")
         self.statusBar().addPermanentWidget(self.resource_monitor_label)
         self.update_resource_monitor()
+
+        # Connect background task manager to footer updates
+        self.task_manager.task_started.connect(self.on_background_task_started)
+        self.task_manager.task_progress.connect(self.on_background_task_progress)
+        self.task_manager.task_completed.connect(self.on_background_task_completed)
+        self.task_manager.task_failed.connect(self.on_background_task_failed)
         
         # Timer for resource monitoring (update every 5 seconds)
         self.resource_monitor_timer = QTimer(self)
@@ -410,6 +404,190 @@ class VideoPlayer(QMainWindow):
         # Create a separate window for subtitles that stays on top
         self.create_subtitle_window()
     
+    def show_status_message(self, message: str, timeout: int = 0) -> None:
+        """Display a transient message in the stats footer."""
+        if self.status_footer:
+            self.status_footer.show_message(message, timeout)
+
+    def on_stats_footer_action_requested(self, key: str) -> None:
+        """Handle action button requests from the stats footer."""
+        if key == "ai":
+            self.restore_ai_dialog()
+        elif key == "translation":
+            self.restore_translation_dialog()
+        elif key == "casting":
+            self.show_streaming_stats()
+
+    def on_stats_footer_cancel_requested(self, key: str) -> None:
+        """Handle cancel requests coming from footer status chips."""
+        task_id = self._active_tasks_by_key.get(key)
+        if task_id:
+            self.task_manager.cancel_task(task_id)
+            self.show_status_message("Cancelling task...", 2000)
+            return
+
+        if key == "translation" and self._active_translation_dialog:
+            if hasattr(self._active_translation_dialog, "cancel_translation"):
+                self._active_translation_dialog.cancel_translation()
+            return
+
+        if key == "casting":
+            self.stop_network_cast()
+
+    def restore_translation_dialog(self) -> None:
+        """Bring the translation dialog back into focus or reopen it."""
+        dialog = self.subtitle_settings_dialog or self._active_translation_dialog
+        if dialog and dialog.isVisible():
+            dialog.raise_()
+            dialog.activateWindow()
+        else:
+            self.show_subtitle_settings()
+
+    def on_translation_started(self, target_lang: str) -> None:
+        """Update footer when translation begins."""
+        if self.status_footer:
+            self.status_footer.set_status(
+                "translation",
+                f"🌐 {self._progress_prefix(0)}Translating to {target_lang}",
+                button_text="Abrir",
+                cancelable=True,
+            )
+        if self.subtitle_settings_dialog:
+            self._active_translation_dialog = self.subtitle_settings_dialog
+
+    def on_translation_progress(self, message: str, percent: int) -> None:
+        """Reflect translation progress in footer."""
+        if not self.status_footer:
+            return
+
+        prefix = "🌐"
+        progress_text = self._progress_prefix(percent)
+        self.status_footer.set_status(
+            "translation",
+            f"{prefix} {progress_text}{message}",
+            button_text="Abrir",
+            cancelable=True,
+        )
+
+    def on_translation_finished(self, message: str, success: bool) -> None:
+        """Finalize translation status in footer."""
+        if not self.status_footer:
+            return
+
+        self._active_tasks_by_key.pop("translation", None)
+
+        self.status_footer.set_status(
+            "translation",
+            f"🌐 {message}",
+            button_text="Abrir",
+            cancelable=False,
+        )
+
+        clear_delay = 8000 if success else 10000
+        self.status_footer.schedule_clear("translation", clear_delay)
+
+    def _key_for_task_type(self, task_type: TaskType) -> str:
+        if task_type == TaskType.AI_GENERATION:
+            return "ai"
+        if task_type == TaskType.TRANSLATION:
+            return "translation"
+        return task_type.value
+
+    def _icon_for_task_type(self, task_type: TaskType) -> str:
+        if task_type == TaskType.AI_GENERATION:
+            return "🤖"
+        if task_type == TaskType.TRANSLATION:
+            return "🌐"
+        return "⚙️"
+
+    def _progress_prefix(self, percent) -> str:
+        if percent is None:
+            return ""
+        try:
+            value = int(percent)
+        except (TypeError, ValueError):
+            return ""
+        value = max(0, min(100, value))
+        return f"{value}% - "
+
+    def on_background_task_started(self, task_info: TaskInfo) -> None:
+        if not self.status_footer:
+            return
+
+        key = self._key_for_task_type(task_info.task_type)
+        icon = self._icon_for_task_type(task_info.task_type)
+        progress_text = self._progress_prefix(task_info.progress)
+
+        self._active_tasks_by_key[key] = task_info.task_id
+        self._task_key_lookup[task_info.task_id] = key
+
+        self.status_footer.set_status(
+            key,
+            f"{icon} {progress_text}{task_info.message}",
+            button_text="Abrir" if key in {"ai", "translation"} else None,
+            cancelable=True,
+        )
+
+    def on_background_task_progress(self, task_info: TaskInfo) -> None:
+        if not self.status_footer:
+            return
+
+        key = self._task_key_lookup.get(task_info.task_id)
+        if not key:
+            return
+
+        icon = self._icon_for_task_type(task_info.task_type)
+        progress_text = self._progress_prefix(task_info.progress)
+
+        self.status_footer.set_status(
+            key,
+            f"{icon} {progress_text}{task_info.message}",
+            button_text="Abrir" if key in {"ai", "translation"} else None,
+            cancelable=True,
+        )
+
+    def on_background_task_completed(self, task_info: TaskInfo) -> None:
+        if not self.status_footer:
+            return
+
+        key = self._task_key_lookup.pop(task_info.task_id, None)
+        if not key:
+            return
+
+        self._active_tasks_by_key.pop(key, None)
+
+        icon = self._icon_for_task_type(task_info.task_type)
+        message = task_info.message or "Completed!"
+
+        self.status_footer.set_status(
+            key,
+            f"{icon} {message}",
+            button_text="Abrir" if key in {"ai", "translation"} else None,
+            cancelable=False,
+        )
+        self.status_footer.schedule_clear(key, 8000)
+
+    def on_background_task_failed(self, task_info: TaskInfo) -> None:
+        if not self.status_footer:
+            return
+
+        key = self._task_key_lookup.pop(task_info.task_id, None)
+        if not key:
+            return
+
+        self._active_tasks_by_key.pop(key, None)
+
+        icon = self._icon_for_task_type(task_info.task_type)
+        message = task_info.message or "Failed"
+
+        self.status_footer.set_status(
+            key,
+            f"{icon} {message}",
+            button_text=None,
+            cancelable=False,
+        )
+        self.status_footer.schedule_clear(key, 10000)
+
     def create_control_panel(self):
         """Create modern video control panel with icons"""
         panel = QFrame()
@@ -579,7 +757,7 @@ class VideoPlayer(QMainWindow):
             print(f"[Startup] Failed to load sample video: {exc}")
             return
 
-        self.statusBar().showMessage("Sample video ready. Load your own file anytime.", 5000)
+        self.show_status_message("Sample video ready. Load your own file anytime.", 5000)
         self._start_sample_casting()
 
     def _remove_sample_from_recents(self, sample_path: str):
@@ -611,8 +789,8 @@ class VideoPlayer(QMainWindow):
             self._update_cast_menu_actions()
             return
 
-        if hasattr(self, "cast_status_label"):
-            self.cast_status_label.setText(f"Cast: {url}")
+        if self.status_footer:
+            self.status_footer.set_status("casting", f"📡 Casting ativo: {url}")
 
         try:
             SAMPLE_CAST_URL_FILE.write_text(url)
@@ -627,9 +805,8 @@ class VideoPlayer(QMainWindow):
             subtitle_path=None,
             autoplay=True,
         )
-
         print(f"[Startup] Sample HLS casting ready at {url}", flush=True)
-        self.statusBar().showMessage(f"Sample HLS stream ready at {url}", 5000)
+        self.show_status_message(f"Sample HLS stream ready at {url}", 5000)
         self._update_cast_menu_actions()
 
     @staticmethod
@@ -929,9 +1106,9 @@ class VideoPlayer(QMainWindow):
                     reason="video_changed",
                 )
             self.casting_manager.stop()
-            if hasattr(self, "cast_status_label"):
-                self.cast_status_label.clear()
-            self.statusBar().showMessage("Casting stopped for new video", 3000)
+            if self.status_footer:
+                self.status_footer.clear_status("casting")
+            self.show_status_message("Casting stopped for new video", 3000)
         self._update_cast_menu_actions()
         
         # Add to recent files
@@ -994,7 +1171,7 @@ class VideoPlayer(QMainWindow):
         self.media_player.play()
         self.timer.start()
         
-        self.statusBar().showMessage(f"Playing: {os.path.basename(file_path)}")
+        self.show_status_message(f"Playing: {os.path.basename(file_path)}")
         self._update_cast_menu_actions()
     
     def open_subtitle(self):
@@ -1039,7 +1216,7 @@ class VideoPlayer(QMainWindow):
                 
                 # Update status with subtitle count
                 subtitle_count = len(self.current_subtitles)
-                self.statusBar().showMessage(
+                self.show_status_message(
                     f"✓ Loaded {subtitle_count} subtitles from: {os.path.basename(file_path)}"
                 )
                 
@@ -1099,10 +1276,10 @@ class VideoPlayer(QMainWindow):
     
     def toggle_mute(self):
         """Toggle mute/unmute"""
-        is_muted = self.media_player.audio_get_mute()
-        self.media_player.audio_set_mute(not is_muted)
-        
-        if not is_muted:
+        muted = self.media_player.audio_get_mute()
+        self.media_player.audio_set_mute(not muted)
+        self.show_status_message("Audio muted" if not muted else "Audio unmuted", 2000)
+        if not muted:
             # Muting
             self.volume_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaVolumeMuted))
             self.volume_btn.setToolTip("Unmute")
@@ -1118,7 +1295,6 @@ class VideoPlayer(QMainWindow):
     def slider_pressed(self):
         """Handle slider press"""
         self.timer.stop()
-    
     def slider_released(self):
         """Handle slider release"""
         if self.media_player.is_playing():
@@ -1437,13 +1613,13 @@ class VideoPlayer(QMainWindow):
         new_volume = max(0, min(100, current_volume + delta))
         self.volume_slider.setValue(new_volume)
         self.set_volume(new_volume)
-        self.statusBar().showMessage(f"Volume set to {new_volume}%", 2000)
+        self.show_status_message(f"Volume set to {new_volume}%", 2000)
 
     def toggle_mute(self):
         """Toggle audio mute state"""
         muted = self.media_player.audio_get_mute()
         self.media_player.audio_set_mute(not muted)
-        self.statusBar().showMessage("Audio muted" if not muted else "Audio unmuted", 2000)
+        self.show_status_message("Audio muted" if not muted else "Audio unmuted", 2000)
 
     def adjust_playback_speed(self, delta):
         """Adjust playback speed by delta"""
@@ -1452,15 +1628,15 @@ class VideoPlayer(QMainWindow):
             return
         if self.media_player.set_rate(new_rate) == 0:
             self.playback_rate = new_rate
-            self.statusBar().showMessage(f"Playback speed: {self.playback_rate:.2f}x", 2000)
+            self.show_status_message(f"Playback speed: {self.playback_rate:.2f}x", 2000)
         else:
-            self.statusBar().showMessage("Unable to change playback speed", 2000)
+            self.show_status_message("Unable to change playback speed", 2000)
 
     def reset_playback_speed(self):
         """Reset playback speed to normal"""
         if self.media_player.set_rate(1.0) == 0:
             self.playback_rate = 1.0
-            self.statusBar().showMessage("Playback speed reset to 1.00x", 2000)
+            self.show_status_message("Playback speed reset to 1.00x", 2000)
 
     def start_network_cast(self):
         """Start casting the current media over HTTP using FFmpeg HLS."""
@@ -1485,9 +1661,9 @@ class VideoPlayer(QMainWindow):
                 reason="restart_requested",
             )
             self.casting_manager.stop()
-            if hasattr(self, "cast_status_label"):
-                self.cast_status_label.clear()
-            self.statusBar().showMessage("Restarting cast for current video", 3000)
+            if self.status_footer:
+                self.status_footer.clear_status("casting")
+            self.show_status_message("Restarting cast for current video", 3000)
         self._update_cast_menu_actions()
 
         if not os.path.exists(self.current_video):
@@ -1532,9 +1708,9 @@ class VideoPlayer(QMainWindow):
             )
             return
 
-        if hasattr(self, "cast_status_label"):
-            self.cast_status_label.setText(f"Cast: {url}")
-        self.statusBar().showMessage(f"Casting started: {url}", 5000)
+        if self.status_footer:
+            self.status_footer.set_status("casting", f"📡 Casting ativo: {url}")
+        self.show_status_message(f"Casting started: {url}", 5000)
         debug_logger.log_cast_started(
             self.current_video,
             source=self._current_video_source,
@@ -1558,7 +1734,7 @@ class VideoPlayer(QMainWindow):
     def stop_network_cast(self):
         """Stop the active casting session."""
         if not self.casting_manager.is_casting:
-            self.statusBar().showMessage("No active casting session", 2000)
+            self.show_status_message("No active casting session", 2000)
             self._update_cast_menu_actions()
             return
 
@@ -1568,9 +1744,9 @@ class VideoPlayer(QMainWindow):
             source=self._current_video_source,
             reason="user_requested",
         )
-        if hasattr(self, "cast_status_label"):
-            self.cast_status_label.clear()
-        self.statusBar().showMessage("Casting stopped", 3000)
+        if self.status_footer:
+            self.status_footer.clear_status("casting")
+        self.show_status_message("Casting stopped", 3000)
         QMessageBox.information(
             self,
             "Casting Stopped",
@@ -1672,6 +1848,11 @@ class VideoPlayer(QMainWindow):
         """Show subtitle settings dialog"""
         # Import here to avoid circular dependency
         from subtitle_settings_dialog import SubtitleSettingsDialog
+
+        if self.subtitle_settings_dialog and self.subtitle_settings_dialog.isVisible():
+            self.subtitle_settings_dialog.raise_()
+            self.subtitle_settings_dialog.activateWindow()
+            return
         
         if self.sidebar_visible:
             self.sidebar_visible = False
@@ -1692,34 +1873,33 @@ class VideoPlayer(QMainWindow):
             video_path=self.current_video,
             subtitle_path=subtitle_path
         )
+        dialog.setModal(False)
         dialog.toggle_sidebar_requested.connect(self.toggle_subtitle_sidebar)
+        dialog.translation_started.connect(self.on_translation_started)
+        dialog.translation_progress.connect(self.on_translation_progress)
+        dialog.translation_finished.connect(self.on_translation_finished)
+        dialog.finished.connect(lambda result, dlg=dialog: self._on_subtitle_dialog_finished(dlg, result))
         self.subtitle_settings_dialog = dialog
+        self._active_translation_dialog = dialog
 
-        try:
-            if dialog.exec():
-                self.subtitle_style = dialog.get_style()
-                self.subtitle_overlay.set_style(self.subtitle_style)
-            
-                # Re-apply timing offset
-                if self.current_subtitles:
-                    base_subtitles = self.subtitle_parser.parse_file(
-                        self.config_manager.get_subtitle_file_for_video(self.current_video)
-                    )
-                    self.current_subtitles = self.subtitle_parser.adjust_timing(
-                        base_subtitles,
-                        self.subtitle_style.timing_offset
-                    )
-                
-                # Save style
-                if self.current_video:
-                    self.config_manager.save_subtitle_style(self.subtitle_style, self.current_video)
-        finally:
-            self._clear_subtitle_dialog_reference()
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
     
     def show_ai_subtitle_generator(self):
         """Show AI subtitle generation dialog"""
         if not self.current_video:
             QMessageBox.information(self, "No Video", "Please load a video first")
+            return
+        
+        # Check if there's already a dialog in progress (minimized or visible)
+        if self.minimized_ai_dialog:
+            self.restore_ai_dialog()
+            return
+        
+        if self.current_ai_dialog and self.current_ai_dialog.isVisible():
+            self.current_ai_dialog.raise_()
+            self.current_ai_dialog.activateWindow()
             return
         
         try:
@@ -1752,13 +1932,6 @@ class VideoPlayer(QMainWindow):
     
     def on_ai_dialog_finished(self, dialog, result):
         """Handle AI dialog finished (accepted or rejected)"""
-        from datetime import datetime
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        
-        print(f"\n[{timestamp}] === ON_AI_DIALOG_FINISHED CALLED ===")
-        print(f"  - Result: {result}")
-        print(f"  - Has segments: {dialog.generated_segments is not None}")
-        
         if result and dialog.generated_segments:
             from ai_subtitle_generator import AISubtitleGenerator
             segments = dialog.get_generated_segments()
@@ -1773,133 +1946,147 @@ class VideoPlayer(QMainWindow):
                     f"AI-generated subtitles saved and loaded!\n{subtitle_path}"
                 )
         
-        # Clean up
+        # Clean up all references
         self.current_ai_dialog = None
-        print(f"[{timestamp}] === ON_AI_DIALOG_FINISHED COMPLETE ===\n")
+        self.minimized_ai_dialog = None
+
+        # Disconnect any remaining progress handlers
+        if hasattr(dialog, 'gen_thread') and dialog.gen_thread:
+            if self._ai_progress_slot:
+                try:
+                    dialog.gen_thread.progress_update.disconnect(self._ai_progress_slot)
+                except TypeError:
+                    pass
+            try:
+                dialog.gen_thread.finished.disconnect(self.on_ai_generation_finished)
+            except TypeError:
+                pass
+        self._ai_progress_slot = None
+
+        if self.status_footer:
+            self.status_footer.clear_status("ai")
     
     def on_ai_dialog_minimized(self, dialog):
         """Handle AI dialog minimized to background"""
-        from datetime import datetime
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        
-        print(f"\n[{timestamp}] === ON_AI_DIALOG_MINIMIZED CALLED ===")
-        print(f"  - Has is_minimized attr: {hasattr(dialog, 'is_minimized')}")
-        if hasattr(dialog, 'is_minimized'):
-            print(f"  - is_minimized value: {dialog.is_minimized}")
-        
         # Store reference to dialog
         self.minimized_ai_dialog = dialog
-        
-        # Create progress indicator if not exists
-        if not self.ai_progress_indicator:
-            print(f"  - Creating new progress indicator")
-            from simple_progress_indicator import SimpleProgressIndicator
-            # Create as floating widget without parent
-            self.ai_progress_indicator = SimpleProgressIndicator(None)
-            self.ai_progress_indicator.clicked.connect(self.restore_ai_dialog)
-            
-            # Position relative to main window
-            self.position_ai_progress_indicator()
-        
-        # Show indicator with CURRENT status from dialog (not reset to 0%)
-        print(f"  - Showing indicator")
-        
+
         # Get current progress from dialog
         current_progress = dialog.progress_bar.value()
         current_message = dialog.status_label.text()
-        print(f"  - Dialog current progress: {current_progress}% - {current_message}")
         
-        self.ai_progress_indicator.update_status(f"{current_progress}% - {current_message}")
-        self.ai_progress_indicator.start_animation()
-        self.ai_progress_indicator.show()
-        self.ai_progress_indicator.raise_()  # Bring to front
-        print(f"  - Indicator visible: {self.ai_progress_indicator.isVisible()}")
-        print(f"  - Indicator position: ({self.ai_progress_indicator.x()}, {self.ai_progress_indicator.y()})")
-        
-        # Start position timer to keep indicator in top-right
-        self.indicator_position_timer.start()
-        print(f"  - Position timer started")
-        
-        # Connect progress updates from thread directly to indicator
-        if hasattr(dialog, 'gen_thread'):
-            # Connect progress signal to update indicator
-            def update_indicator_progress(message, percent):
-                if self.ai_progress_indicator and self.ai_progress_indicator.isVisible():
-                    self.ai_progress_indicator.update_status(f"{percent}% - {message}")
-                    print(f"[INDICATOR] Updated from thread signal: {percent}% - {message}")
-            
-            dialog.gen_thread.progress_update.connect(update_indicator_progress)
-            dialog.gen_thread.finished.connect(self.on_ai_generation_finished)
-            print(f"  - Connected to gen_thread signals (progress + finished)")
-        
-        print(f"[{timestamp}] === ON_AI_DIALOG_MINIMIZED COMPLETE ===\n")
-    
-    def position_ai_progress_indicator(self):
-        """Position the AI progress indicator in top-right corner"""
-        if not self.ai_progress_indicator or not self.ai_progress_indicator.isVisible():
-            return
-        
-        # Get main window position and size
-        main_pos = self.pos()
-        main_width = self.width()
-        indicator_width = self.ai_progress_indicator.width()
-        indicator_height = self.ai_progress_indicator.height()
-        
-        # Position in top-right corner of main window (absolute screen coordinates)
-        x = main_pos.x() + main_width - indicator_width - 20
-        y = main_pos.y() + 80  # Below menu bar
-        
-        # Only move if position changed significantly (avoid spam)
-        current_pos = (self.ai_progress_indicator.x(), self.ai_progress_indicator.y())
-        new_pos = (x, y)
-        if abs(current_pos[0] - new_pos[0]) > 5 or abs(current_pos[1] - new_pos[1]) > 5:
-            self.ai_progress_indicator.move(x, y)
-            self.ai_progress_indicator.raise_()  # Keep on top
+        # Check if generation is already complete
+        generation_complete = not (hasattr(dialog, 'gen_thread') and 
+                                   dialog.gen_thread and 
+                                   dialog.gen_thread.isRunning())
+        if self.status_footer:
+            if generation_complete:
+                status_text = "🤖 100% - Complete! Clique para abrir"
+            else:
+                status_text = f"🤖 {current_progress}% - {current_message}"
+            self.status_footer.set_status(
+                "ai",
+                status_text,
+                button_text="Abrir",
+            )
+
+        # Keep player window active so keyboard shortcuts remain usable
+        self.activateWindow()
+        self.raise_()
+
+        # Connect progress updates from thread directly to footer (only if running)
+        if hasattr(dialog, 'gen_thread') and dialog.gen_thread and dialog.gen_thread.isRunning():
+            if self._ai_progress_slot is None:
+                def _ai_progress_slot(message, percent):
+                    if self.status_footer:
+                        self.status_footer.set_status(
+                            "ai",
+                            f"🤖 {percent}% - {message}",
+                            button_text="Abrir",
+                        )
+
+                self._ai_progress_slot = _ai_progress_slot
+
+            try:
+                dialog.gen_thread.progress_update.connect(
+                    self._ai_progress_slot,
+                    Qt.ConnectionType.UniqueConnection,
+                )
+            except TypeError:
+                pass  # Already connected
+
+            try:
+                dialog.gen_thread.finished.connect(
+                    self.on_ai_generation_finished,
+                    Qt.ConnectionType.UniqueConnection,
+                )
+            except TypeError:
+                pass
     
     def restore_ai_dialog(self):
         """Restore minimized AI dialog"""
-        print(f"[RESTORE] restore_ai_dialog called")
-        print(f"  - Has minimized_ai_dialog: {self.minimized_ai_dialog is not None}")
-        
         if self.minimized_ai_dialog:
-            print(f"  - Restoring dialog...")
+            # Use the dialog's restore method to ensure proper rendering
+            self.minimized_ai_dialog.restore_from_background()
+
+            if self.status_footer:
+                self.status_footer.clear_status("ai")
             
-            # Stop position timer
-            if self.indicator_position_timer.isActive():
-                self.indicator_position_timer.stop()
-                print(f"  - Stopped position timer")
-            
-            # Hide and stop indicator
-            if self.ai_progress_indicator:
-                self.ai_progress_indicator.stop_animation()
-                self.ai_progress_indicator.hide()
-                print(f"  - Hidden indicator")
-            
-            # Show dialog again
-            self.minimized_ai_dialog.minimized = False
-            self.minimized_ai_dialog.is_minimized = False
-            self.minimized_ai_dialog.show()
-            self.minimized_ai_dialog.raise_()
-            self.minimized_ai_dialog.activateWindow()
-            print(f"  - Dialog restored and activated")
+            # DON'T clear minimized_ai_dialog here - keep it so we can minimize again!
+            # It will be cleared when generation finishes or dialog is closed
     
     def on_ai_generation_finished(self):
         """Handle AI generation completion"""
-        print(f"[FINISHED] AI generation finished")
+        if self.minimized_ai_dialog and self.status_footer:
+            self.status_footer.set_status(
+                "ai",
+                "🤖 100% - Complete! Clique para abrir",
+                button_text="Abrir",
+            )
+
+        # Disconnect progress slot once generation completes
+        dialog = self.current_ai_dialog or self.minimized_ai_dialog
+        if dialog and hasattr(dialog, 'gen_thread') and dialog.gen_thread:
+            if self._ai_progress_slot:
+                try:
+                    dialog.gen_thread.progress_update.disconnect(self._ai_progress_slot)
+                except TypeError:
+                    pass
+            try:
+                dialog.gen_thread.finished.disconnect(self.on_ai_generation_finished)
+            except TypeError:
+                pass
+
+        self._ai_progress_slot = None
         
-        # Stop position timer
-        if hasattr(self, 'indicator_position_timer') and self.indicator_position_timer.isActive():
-            self.indicator_position_timer.stop()
-            print(f"  - Stopped position timer")
-        
-        if self.ai_progress_indicator:
-            self.ai_progress_indicator.stop_animation()
-            self.ai_progress_indicator.hide()
-            print(f"  - Hidden indicator")
-        
-        self.minimized_ai_dialog = None
-        print(f"  - Cleared minimized dialog reference")
+        # Keep references so user can still open the completed dialog
+        # They will be cleared when dialog is actually closed
     
+    def _on_subtitle_dialog_finished(self, dialog: QDialog, result: int) -> None:
+        """Handle legacy subtitle dialog completion without blocking UI."""
+        if dialog is not self.subtitle_settings_dialog:
+            return
+
+        try:
+            if result == int(QDialog.DialogCode.Accepted):
+                self.subtitle_style = dialog.get_style()
+                self.subtitle_overlay.set_style(self.subtitle_style)
+
+                if self.current_subtitles:
+                    base_path = self.config_manager.get_subtitle_file_for_video(self.current_video)
+                    if base_path and os.path.exists(base_path):
+                        base_subtitles = self.subtitle_parser.parse_file(base_path)
+                        self.current_subtitles = self.subtitle_parser.adjust_timing(
+                            base_subtitles,
+                            self.subtitle_style.timing_offset
+                        )
+
+                if self.current_video:
+                    self.config_manager.save_subtitle_style(self.subtitle_style, self.current_video)
+        finally:
+            self._clear_subtitle_dialog_reference()
+            dialog.deleteLater()
+
     def show_about(self):
         """Show about dialog"""
         QMessageBox.about(
@@ -1920,6 +2107,7 @@ class VideoPlayer(QMainWindow):
     def _clear_subtitle_dialog_reference(self):
         """Reset legacy dialog reference when it closes"""
         self.subtitle_settings_dialog = None
+        self._active_translation_dialog = None
 
     def update_subtitle_window_geometry(self):
         """Synchronize subtitle overlay window with the video frame"""
@@ -1945,25 +2133,11 @@ class VideoPlayer(QMainWindow):
         """Handle window resize"""
         super().resizeEvent(event)
         self.update_subtitle_window_geometry()
-        self.position_status_indicator()
-        self.position_ai_progress_indicator()
     
     def moveEvent(self, event):
         """Handle window move - keep subtitle window synchronized"""
         super().moveEvent(event)
         self.update_subtitle_window_geometry()
-    
-    def position_status_indicator(self):
-        """Position status indicator widget in top-right corner"""
-        if self.status_indicator and self.video_frame:
-            # Get video frame geometry in window coordinates
-            frame_pos = self.video_frame.mapTo(self, self.video_frame.rect().topRight())
-            
-            # Position indicator 10px from top-right
-            indicator_x = frame_pos.x() - self.status_indicator.width() - 10
-            indicator_y = frame_pos.y() + 10
-            
-            self.status_indicator.move(indicator_x, indicator_y)
     
     def closeEvent(self, event):
         """Handle window close with proper cleanup to prevent memory leaks"""

@@ -182,10 +182,10 @@ pip install openai-whisper torch torchvision torchaudio --index-url https://down
             # Optimize model for inference
             self.model.eval()  # Set to evaluation mode
             
-            # Use FP16 if supported (2x faster on RTX GPUs)
-            if self._whisper_config['fp16'] and device == "cuda":
-                self.model.half()
-                logger.info("Model converted to FP16 for faster inference")
+            # Keep model in FP32 to avoid type conversion errors
+            # FP16 can cause "expected Float but found Half" errors in some PyTorch versions
+            self.model.float()
+            logger.info("Model using FP32 (Full Precision) for stability")
             
             # Force garbage collection after loading model
             gc.collect()
@@ -304,10 +304,12 @@ pip install openai-whisper torch torchvision torchaudio --index-url https://down
                     progress_callback(f"🤖 Transcribing on CPU ({self.resource_manager.resources.cpu_count_physical} cores)...", 30)
             
             # Use optimized settings from ResourceManager
+            # Disable FP16 to avoid "expected Float but found Half" errors
+            # FP16 can cause compatibility issues with some PyTorch operations
             options = {
                 'task': 'transcribe',
                 'verbose': False,
-                'fp16': self._whisper_config['fp16'],
+                'fp16': False,  # Disabled to prevent type conversion errors
                 'beam_size': self._whisper_config['beam_size'],
                 'best_of': self._whisper_config['best_of'],
                 'condition_on_previous_text': self._whisper_config['condition_on_previous_text'],
