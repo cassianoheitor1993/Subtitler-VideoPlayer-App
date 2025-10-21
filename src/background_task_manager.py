@@ -14,6 +14,7 @@ class TaskType(Enum):
     """Types of background tasks"""
     AI_GENERATION = "ai_generation"
     TRANSLATION = "translation"
+    PROXY_TRANSCODE = "proxy_transcode"
 
 
 class TaskStatus(Enum):

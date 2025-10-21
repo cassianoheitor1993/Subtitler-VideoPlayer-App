@@ -49,8 +49,18 @@ class TaskIndicator(QFrame):
         header_layout = QHBoxLayout()
         
         # Task icon and title
-        icon = "🤖" if self.task_info.task_type == TaskType.AI_GENERATION else "🌍"
-        title = "AI Generation" if self.task_info.task_type == TaskType.AI_GENERATION else "Translation"
+        if self.task_info.task_type == TaskType.AI_GENERATION:
+            icon = "🤖"
+            title = "AI Generation"
+        elif self.task_info.task_type == TaskType.TRANSLATION:
+            icon = "🌍"
+            title = "Translation"
+        elif self.task_info.task_type == TaskType.PROXY_TRANSCODE:
+            icon = "🎬"
+            title = "Proxy 1080p"
+        else:
+            icon = "⚙️"
+            title = "Background Task"
         
         self.title_label = QLabel(f"{icon} {title}")
         self.title_label.setFont(QFont("Arial", 10, QFont.Weight.Bold))

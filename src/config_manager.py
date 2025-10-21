@@ -41,6 +41,7 @@ class AppConfig:
     volume: int = 100
     fullscreen: bool = False
     theme: str = "dark"
+    hardware_acceleration: str = "auto"
 
 
 class ConfigManager:

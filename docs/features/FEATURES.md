@@ -15,6 +15,8 @@
 - ✅ Volume control with percentage display
 - ✅ Fullscreen mode toggle
 - ✅ Recent files menu (last 10 videos)
+- ✅ Hardware acceleration profile selector (Auto, VA-API, NVDEC, VDPAU, CPU-only)
+- ✅ One-click 1080p proxy generation for high bitrate media
 
 ### Keyboard Shortcuts
 - `Space` - Play/Pause

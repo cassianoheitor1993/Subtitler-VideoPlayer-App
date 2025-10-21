@@ -6,6 +6,10 @@ Professional video player with VLC backend and subtitle support
 import sys
 import os
 import socket
+import shutil
+import subprocess
+import time
+from typing import Optional
 from pathlib import Path
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
@@ -14,7 +18,7 @@ from PyQt6.QtWidgets import (
     QDialog
 )
 from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal, QPoint
-from PyQt6.QtGui import QAction, QPalette, QColor, QFont, QPainter, QPen
+from PyQt6.QtGui import QAction, QActionGroup, QPalette, QColor, QFont, QPainter, QPen
 import vlc
 
 # Suppress VLC warnings and debug messages
@@ -237,6 +241,14 @@ class VideoPlayer(QMainWindow):
         self._active_tasks_by_key = {}
         self._task_key_lookup = {}
         self.status_footer = None
+        self.hw_accel_actions = {}
+        self.hw_accel_group = None
+        self.optimize_proxy_action = None
+        self._proxy_task_active = False
+        self._proxy_display_name = ""
+        self._pending_proxy_output = None
+        self._last_proxy_output = None
+        self._proxy_labels_by_task = {}
 
         # AI generation dialog references
         self.minimized_ai_dialog = None  # Reference to minimized dialog
@@ -253,17 +265,22 @@ class VideoPlayer(QMainWindow):
         self.mouse_move_timer.setSingleShot(True)
         self.mouse_move_timer.timeout.connect(self.hide_controls)
         
-        # VLC setup with suppressed logging
-        vlc_args = [
-            '--no-xlib',
-            '--quiet',
-            '--no-video-title-show',
-            '--avcodec-hw=none',  # Disable hardware acceleration to avoid errors
-            '--no-sub-autodetect-file',  # Don't auto-detect subtitle files
-            '--sub-track=-1',  # Disable embedded subtitle tracks
-        ]
-        self.instance = vlc.Instance(vlc_args)
-        self.media_player = self.instance.media_player_new()
+        # VLC setup with configurable hardware acceleration
+        stored_mode = getattr(self.config_manager.config, "hardware_acceleration", "auto") or "auto"
+        normalized_mode = str(stored_mode).lower()
+        supported_modes = {"auto", "vaapi", "nvdec", "vdpau", "disabled"}
+        synonyms = {
+            "none": "disabled",
+            "off": "disabled",
+            "cpu": "disabled",
+        }
+        normalized_mode = synonyms.get(normalized_mode, normalized_mode)
+        if normalized_mode not in supported_modes:
+            normalized_mode = "auto"
+        self._hardware_accel_mode = normalized_mode
+        self.instance = None
+        self.media_player = None
+        self._initialize_vlc_player()
         
         # Pass resource manager to casting manager
         self.casting_manager = FFmpegCastingManager(self.resource_manager)
@@ -394,12 +411,7 @@ class VideoPlayer(QMainWindow):
         QApplication.instance().installEventFilter(self)
         
         # Connect VLC to video frame - this embeds the video natively
-        if sys.platform.startswith('linux'):
-            self.media_player.set_xwindow(int(self.video_frame.winId()))
-        elif sys.platform == "win32":
-            self.media_player.set_hwnd(int(self.video_frame.winId()))
-        elif sys.platform == "darwin":
-            self.media_player.set_nsobject(int(self.video_frame.winId()))
+        self._attach_media_player_to_frame()
         
         # Create a separate window for subtitles that stays on top
         self.create_subtitle_window()
@@ -417,6 +429,8 @@ class VideoPlayer(QMainWindow):
             self.restore_translation_dialog()
         elif key == "casting":
             self.show_streaming_stats()
+        elif key == "proxy":
+            self._open_proxy_output()
 
     def on_stats_footer_cancel_requested(self, key: str) -> None:
         """Handle cancel requests coming from footer status chips."""
@@ -491,6 +505,8 @@ class VideoPlayer(QMainWindow):
             return "ai"
         if task_type == TaskType.TRANSLATION:
             return "translation"
+        if task_type == TaskType.PROXY_TRANSCODE:
+            return "proxy"
         return task_type.value
 
     def _icon_for_task_type(self, task_type: TaskType) -> str:
@@ -498,6 +514,8 @@ class VideoPlayer(QMainWindow):
             return "🤖"
         if task_type == TaskType.TRANSLATION:
             return "🌐"
+        if task_type == TaskType.PROXY_TRANSCODE:
+            return "🎬"
         return "⚙️"
 
     def _progress_prefix(self, percent) -> str:
@@ -518,12 +536,17 @@ class VideoPlayer(QMainWindow):
         icon = self._icon_for_task_type(task_info.task_type)
         progress_text = self._progress_prefix(task_info.progress)
 
+        display_message = task_info.message
+        if key == "proxy":
+            proxy_label = self._proxy_labels_by_task.get(task_info.task_id) or self._proxy_display_name or os.path.basename(self.current_video or "")
+            display_message = f"Otimizando {proxy_label}..."
+
         self._active_tasks_by_key[key] = task_info.task_id
         self._task_key_lookup[task_info.task_id] = key
 
         self.status_footer.set_status(
             key,
-            f"{icon} {progress_text}{task_info.message}",
+            f"{icon} {progress_text}{display_message}",
             button_text="Abrir" if key in {"ai", "translation"} else None,
             cancelable=True,
         )
@@ -555,14 +578,44 @@ class VideoPlayer(QMainWindow):
             return
 
         self._active_tasks_by_key.pop(key, None)
+        if task_info.task_id in self._proxy_labels_by_task:
+            self._proxy_labels_by_task.pop(task_info.task_id, None)
 
         icon = self._icon_for_task_type(task_info.task_type)
         message = task_info.message or "Completed!"
+        button_text = "Abrir" if key in {"ai", "translation", "proxy"} else None
+
+        if key == "proxy":
+            self._proxy_task_active = False
+            self._pending_proxy_output = None
+            if self.optimize_proxy_action:
+                self.optimize_proxy_action.setEnabled(True)
+
+            output_path: Optional[str] = None
+            if isinstance(task_info.result, str):
+                output_path = task_info.result
+            elif isinstance(task_info.result, dict):
+                output_path = task_info.result.get("output")
+
+            if output_path and os.path.exists(output_path):
+                self._last_proxy_output = output_path
+                message = f"Proxy 1080p pronto: {os.path.basename(output_path)}"
+            else:
+                message = "Proxy 1080p finalizado"
+
+            self.status_footer.set_status(
+                key,
+                f"{icon} {message}",
+                button_text=button_text,
+                cancelable=False,
+            )
+            self.status_footer.schedule_clear(key, 15000)
+            return
 
         self.status_footer.set_status(
             key,
             f"{icon} {message}",
-            button_text="Abrir" if key in {"ai", "translation"} else None,
+            button_text=button_text,
             cancelable=False,
         )
         self.status_footer.schedule_clear(key, 8000)
@@ -576,9 +629,28 @@ class VideoPlayer(QMainWindow):
             return
 
         self._active_tasks_by_key.pop(key, None)
+        if task_info.task_id in self._proxy_labels_by_task:
+            self._proxy_labels_by_task.pop(task_info.task_id, None)
 
         icon = self._icon_for_task_type(task_info.task_type)
         message = task_info.message or "Failed"
+
+        if key == "proxy":
+            self._proxy_task_active = False
+            self._pending_proxy_output = None
+            if self.optimize_proxy_action:
+                self.optimize_proxy_action.setEnabled(True)
+
+            error_detail = task_info.error or task_info.message or "Falha desconhecida"
+            self.status_footer.set_status(
+                key,
+                f"{icon} Falha ao gerar proxy",
+                button_text=None,
+                cancelable=False,
+            )
+            self.status_footer.schedule_clear(key, 12000)
+            self.show_status_message(f"Não foi possível criar o proxy 1080p: {error_detail}", 6000)
+            return
 
         self.status_footer.set_status(
             key,
@@ -730,6 +802,316 @@ class VideoPlayer(QMainWindow):
         self.update_subtitle_window_geometry()
         QTimer.singleShot(0, self.update_subtitle_window_geometry)
 
+    def _initialize_vlc_player(self):
+        """Create or recreate the VLC backend."""
+        hw_flag = self._resolve_hw_accel_flag(self._hardware_accel_mode)
+        vlc_args = [
+            '--no-xlib',
+            '--quiet',
+            '--no-video-title-show',
+            f'--avcodec-hw={hw_flag}',
+            '--no-sub-autodetect-file',
+            '--sub-track=-1',
+        ]
+
+        old_player = getattr(self, 'media_player', None)
+        if old_player is not None:
+            try:
+                old_player.stop()
+            except Exception:
+                pass
+            try:
+                old_player.release()
+            except Exception:
+                pass
+
+        old_instance = getattr(self, 'instance', None)
+        if old_instance is not None:
+            try:
+                old_instance.release()
+            except Exception:
+                pass
+
+        self.instance = vlc.Instance(vlc_args)
+        self.media_player = self.instance.media_player_new()
+        self.media_player.audio_set_volume(self.config_manager.config.volume)
+        self._attach_media_player_to_frame()
+
+    def _attach_media_player_to_frame(self):
+        """Bind VLC's video surface to the QWidget."""
+        if not hasattr(self, 'video_frame') or self.video_frame is None:
+            return
+        if self.media_player is None:
+            return
+
+        win_id = int(self.video_frame.winId())
+        if sys.platform.startswith('linux'):
+            self.media_player.set_xwindow(win_id)
+        elif sys.platform == "win32":
+            self.media_player.set_hwnd(win_id)
+        elif sys.platform == "darwin":
+            self.media_player.set_nsobject(win_id)
+
+    @staticmethod
+    def _resolve_hw_accel_flag(mode: str) -> str:
+        mapping = {
+            'auto': 'any',
+            'vaapi': 'vaapi',
+            'nvdec': 'nvdec',
+            'vdpau': 'vdpau',
+            'disabled': 'none',
+        }
+        normalized = (mode or 'auto').lower()
+        return mapping.get(normalized, 'any')
+
+    def _set_hardware_accel_mode(self, mode: str) -> None:
+        canonical = (mode or 'auto').lower()
+        synonyms = {
+            'none': 'disabled',
+            'off': 'disabled',
+            'cpu': 'disabled',
+        }
+        canonical = synonyms.get(canonical, canonical)
+        if canonical not in {'auto', 'vaapi', 'nvdec', 'vdpau', 'disabled'}:
+            canonical = 'auto'
+        if canonical == self._hardware_accel_mode:
+            self._update_hw_accel_menu()
+            return
+
+        current_path = self.current_video if self.current_video and os.path.exists(self.current_video) else None
+        was_playing = False
+        playback_time = 0
+        if self.media_player is not None and current_path:
+            try:
+                was_playing = self.media_player.is_playing()
+                playback_time = max(0, self.media_player.get_time())
+            except Exception:
+                was_playing = False
+                playback_time = 0
+
+        self._hardware_accel_mode = canonical
+        self.config_manager.config.hardware_acceleration = canonical
+        self.config_manager.save_config()
+
+        self._initialize_vlc_player()
+
+        if current_path:
+            media = self.instance.media_new(current_path)
+            self.media_player.set_media(media)
+            resume_time = playback_time
+            if was_playing:
+                self.media_player.play()
+                if resume_time > 0:
+                    QTimer.singleShot(200, lambda restore_time=resume_time: self.media_player.set_time(restore_time))
+            else:
+                self.media_player.play()
+                if resume_time > 0:
+                    QTimer.singleShot(200, lambda restore_time=resume_time: self.media_player.set_time(restore_time))
+                QTimer.singleShot(250, self.media_player.pause)
+
+        self._update_hw_accel_menu()
+
+        label_map = {
+            'auto': 'Auto (Detect GPU)',
+            'vaapi': 'Intel/AMD VA-API',
+            'nvdec': 'NVIDIA NVDEC',
+            'vdpau': 'Legacy VDPAU',
+            'disabled': 'Disabled (CPU only)',
+        }
+        label = label_map.get(canonical, canonical.title())
+
+        notice = ' Playback resumed automatically.' if current_path and was_playing else ' Playback paused at the previous position.' if current_path else ''
+        self.show_status_message(f'Hardware acceleration set to {label}.{notice}', 5000)
+
+    def _on_hardware_accel_selected(self, mode: str, checked: bool) -> None:
+        if not checked:
+            return
+        self._set_hardware_accel_mode(mode)
+
+    def _update_hw_accel_menu(self) -> None:
+        if not self.hw_accel_actions:
+            return
+
+        current = self._hardware_accel_mode
+        for mode, action in self.hw_accel_actions.items():
+            if action.isChecked() == (mode == current):
+                continue
+            action.blockSignals(True)
+            action.setChecked(mode == current)
+            action.blockSignals(False)
+
+    @staticmethod
+    def _build_proxy_output_path(input_path: Path) -> Path:
+        base_name = f"{input_path.stem}_1080p_proxy"
+        candidate = input_path.with_name(f"{base_name}.mp4")
+        index = 1
+        while candidate.exists():
+            candidate = input_path.with_name(f"{base_name}_{index}.mp4")
+            index += 1
+        return candidate
+
+    @staticmethod
+    def _probe_media_duration_ms(video_path: str) -> int:
+        cmd = [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            video_path,
+        ]
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        except FileNotFoundError:
+            return 0
+
+        if result.returncode != 0:
+            return 0
+
+        try:
+            seconds = float(result.stdout.strip())
+            if seconds > 0:
+                return int(seconds * 1000)
+        except (TypeError, ValueError):
+            return 0
+
+        return 0
+
+    def _transcode_to_proxy(
+        self,
+        input_path: str,
+        output_path: str,
+        target_height: int = 1080,
+        display_name: str = "",
+        *,
+        progress_callback=None,
+        cancel_check=None,
+    ) -> Optional[str]:
+        progress_callback = progress_callback or (lambda *_: None)
+        cancel_check = cancel_check or (lambda: False)
+
+        source = Path(input_path)
+        destination = Path(output_path)
+        label = display_name or source.name
+
+        duration_ms = self._probe_media_duration_ms(str(source))
+        progress_callback(f"Iniciando proxy 1080p para {label}", 0)
+
+        cmd = [
+            "ffmpeg",
+            "-hide_banner",
+            "-y",
+            "-progress",
+            "pipe:1",
+            "-nostats",
+            "-i",
+            str(source),
+            "-vf",
+            f"scale=-2:{target_height}",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "medium",
+            "-crf",
+            "20",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k",
+            "-movflags",
+            "+faststart",
+            str(destination),
+        ]
+
+        process: Optional[subprocess.Popen] = None
+
+        try:
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                universal_newlines=True,
+                bufsize=1,
+            )
+        except FileNotFoundError as exc:
+            raise RuntimeError("FFmpeg não foi encontrado no PATH.") from exc
+
+        captured_output: list[str] = []
+        last_percent = -1
+
+        try:
+            while True:
+                if cancel_check():
+                    process.terminate()
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait(timeout=5)
+                    if destination.exists():
+                        try:
+                            destination.unlink()
+                        except OSError:
+                            pass
+                    return None
+
+                line = process.stdout.readline()
+                if not line:
+                    if process.poll() is not None:
+                        break
+                    time.sleep(0.05)
+                    continue
+
+                line = line.strip()
+                if not line:
+                    continue
+
+                captured_output.append(line)
+                if len(captured_output) > 40:
+                    captured_output.pop(0)
+
+                if line.startswith("out_time_ms="):
+                    try:
+                        current = int(line.split("=", 1)[1])
+                    except ValueError:
+                        continue
+                    if duration_ms > 0:
+                        percent = min(99, max(0, int(current * 100 / duration_ms)))
+                    else:
+                        percent = min(99, last_percent + 1 if last_percent >= 0 else 0)
+                    if percent != last_percent:
+                        progress_callback(f"Otimizando {label}...", percent)
+                        last_percent = percent
+                elif line == "progress=end":
+                    progress_callback(f"Finalizando {label}...", 99)
+
+            return_code = process.wait()
+            if cancel_check():
+                if destination.exists():
+                    try:
+                        destination.unlink()
+                    except OSError:
+                        pass
+                return None
+
+            if return_code != 0:
+                snippet = "\n".join(captured_output[-10:])
+                raise RuntimeError(f"FFmpeg falhou ao gerar proxy. Código {return_code}. Saída:\n{snippet}")
+
+            if destination.exists():
+                progress_callback(f"Proxy 1080p pronto: {destination.name}", 100)
+            return str(destination)
+
+        finally:
+            if process and process.stdout:
+                process.stdout.close()
+
     def _autoplay_sample_video(self):
         """Load and cast the bundled sample video on startup for quick validation."""
         if os.getenv("SUBTITLEPLAYER_DISABLE_SAMPLE_AUTOPLAY") == "1":
@@ -875,6 +1257,39 @@ class VideoPlayer(QMainWindow):
         fullscreen_action.setShortcut("F")
         fullscreen_action.triggered.connect(self.toggle_fullscreen)
         playback_menu.addAction(fullscreen_action)
+
+        playback_menu.addSeparator()
+
+        hardware_menu = playback_menu.addMenu("Hardware &Acceleration")
+        self.hw_accel_group = QActionGroup(self)
+        self.hw_accel_group.setExclusive(True)
+
+        accel_options = [
+            ("auto", "Auto (Detect GPU)"),
+            ("vaapi", "Intel/AMD VA-API"),
+            ("nvdec", "NVIDIA NVDEC"),
+            ("vdpau", "Legacy VDPAU"),
+            ("disabled", "Disabled (CPU only)"),
+        ]
+
+        for mode, label in accel_options:
+            action = QAction(label, self)
+            action.setCheckable(True)
+            action.triggered.connect(lambda checked, value=mode: self._on_hardware_accel_selected(value, checked))
+            hardware_menu.addAction(action)
+            self.hw_accel_group.addAction(action)
+            self.hw_accel_actions[mode] = action
+
+        self._update_hw_accel_menu()
+
+        playback_menu.addSeparator()
+
+        self.optimize_proxy_action = QAction("Generate 1080p Proxy...", self)
+        self.optimize_proxy_action.setEnabled(False)
+        self.optimize_proxy_action.setShortcut("Ctrl+Alt+P")
+        self.optimize_proxy_action.setToolTip("Create a 1080p H.264 proxy copy for smoother playback (Ctrl+Alt+P)")
+        self.optimize_proxy_action.triggered.connect(self.create_optimized_proxy)
+        playback_menu.addAction(self.optimize_proxy_action)
         
         # Audio menu
         audio_menu = menubar.addMenu("&Audio")
@@ -1126,6 +1541,8 @@ class VideoPlayer(QMainWindow):
         self.stop_btn.setEnabled(True)
         self.seek_forward_btn.setEnabled(True)
         self.seek_backward_btn.setEnabled(True)
+        if self.optimize_proxy_action:
+            self.optimize_proxy_action.setEnabled(True)
         
         # Try to auto-load subtitle
         subtitle_file = self.config_manager.get_subtitle_file_for_video(file_path)
@@ -1173,6 +1590,90 @@ class VideoPlayer(QMainWindow):
         
         self.show_status_message(f"Playing: {os.path.basename(file_path)}")
         self._update_cast_menu_actions()
+
+    def create_optimized_proxy(self):
+        """Generate a lighter 1080p proxy file using FFmpeg."""
+        if not self.current_video:
+            QMessageBox.information(
+                self,
+                "Nenhum vídeo carregado",
+                "Abra um arquivo antes de gerar a cópia otimizada.",
+            )
+            return
+
+        if "proxy" in self._active_tasks_by_key:
+            self.show_status_message("Já existe um proxy sendo gerado em segundo plano.", 4000)
+            return
+
+        if shutil.which("ffmpeg") is None:
+            QMessageBox.warning(
+                self,
+                "FFmpeg necessário",
+                "Não encontrei o executável do FFmpeg no PATH. Instale o FFmpeg para criar a cópia 1080p.",
+            )
+            return
+
+        input_path = Path(self.current_video)
+        if not input_path.exists():
+            QMessageBox.warning(
+                self,
+                "Arquivo indisponível",
+                f"O arquivo original não pode ser acessado:\n{self.current_video}",
+            )
+            return
+
+        output_path = self._build_proxy_output_path(input_path)
+        label = input_path.name
+
+        self._proxy_display_name = label
+        self._pending_proxy_output = str(output_path)
+        self._last_proxy_output = None
+        self._proxy_task_active = True
+
+        try:
+            task_id = self.task_manager.start_task(
+                TaskType.PROXY_TRANSCODE,
+                self._transcode_to_proxy,
+                str(input_path),
+                str(output_path),
+                1080,
+                label,
+            )
+        except RuntimeError as exc:
+            QMessageBox.critical(
+                self,
+                "Erro ao iniciar FFmpeg",
+                str(exc),
+            )
+            self._proxy_task_active = False
+            return
+
+        self._proxy_labels_by_task[task_id] = label
+        self._active_tasks_by_key["proxy"] = task_id
+        self._task_key_lookup[task_id] = "proxy"
+
+        if self.optimize_proxy_action:
+            self.optimize_proxy_action.setEnabled(False)
+
+        self.status_footer.set_status(
+            "proxy",
+            f"🎬 {self._progress_prefix(0)}Otimizando {label}...",
+            button_text=None,
+            cancelable=True,
+        )
+        self.show_status_message("Gerando cópia 1080p otimizada em segundo plano...", 4000)
+
+    def _open_proxy_output(self) -> None:
+        """Load the most recently generated proxy file."""
+        if not self._last_proxy_output or not os.path.exists(self._last_proxy_output):
+            QMessageBox.information(
+                self,
+                "Nenhum proxy disponível",
+                "Gere um proxy 1080p primeiro para reproduzir a cópia otimizada.",
+            )
+            return
+
+        self.load_video(self._last_proxy_output, source="proxy")
     
     def open_subtitle(self):
         """Open subtitle file dialog"""

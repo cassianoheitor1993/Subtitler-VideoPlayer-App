@@ -19,6 +19,7 @@ Welcome to the SubtitlePlayer documentation! This directory contains comprehensi
 - **[Subtitle Display](features/SUBTITLE_DISPLAY_FIX.md)** - Rendering and styling improvements
 - **[Loading Optimizations](features/SUBTITLE_LOADING_IMPROVEMENTS.md)** - Performance enhancements
 - **[Timing Features](features/TIMING_TRANSLATION_FEATURES.md)** - Subtitle synchronization
+- **[Video Performance Tools](features/VIDEO_PERFORMANCE_TOOLS.md)** - Hardware acceleration presets and proxy generation
 
 ### 🛠️ Development
 - **[Development Guide](development/DEVELOPMENT.md)** - Setup your development environment

@@ -11,7 +11,8 @@ A professional, feature-rich video player for Linux with intelligent subtitle ma
 
 ### 🎬 Video Playback
 - **Multi-format Support**: MP4, AVI, MKV, MOV, FLV, WMV, M4V, WebM, and more
-- **Hardware Acceleration**: Leverages VLC's powerful playback engine
+- **Hardware Acceleration Controls**: Switch between Auto, VA-API, NVDEC, VDPAU, or CPU-only decoding from the Playback menu
+- **Proxy Generation**: Create lightweight 1080p H.264 proxies for high-bitrate or 4K sources without leaving the player
 - **Interactive Timeline**: Click to seek, smooth playback controls
 - **Recent Files**: Quick access to previously watched videos
 
@@ -79,18 +80,10 @@ Comprehensive documentation is available in the [`docs/`](docs/) directory:
 ## 🚀 Quick Start
 
 ### Prerequisites
-- **OS**: Linux (Ubuntu, Fedora, Arch, etc.)
-- **Python**: 3.8+
-- **VLC**: VLC media player installed
+- **FFmpeg**: Required for generating 1080p proxy files (optional but recommended)
 
 ### Installation
-
-```bash
-# Install system dependencies (Ubuntu/Debian)
-sudo apt update
-sudo apt install python3 python3-pip python3-venv vlc libvlc-dev
-
-# Clone the repository
+- **Ctrl+Alt+P**: Generate 1080p proxy of the current video
 git clone https://github.com/cassianoheitor1993/Subtitler-VideoPlayer-App.git SubtitlePlayer
 cd SubtitlePlayer
 
@@ -137,6 +130,10 @@ python3 main.py
 4. **Translate**: Subtitle → Translate Subtitles
    - Minimize the legacy dialog to keep working and use the status footer chip to reopen or cancel
 5. **Cast**: Cast → Start HTTP Cast (stream to other devices)
+
+#### Performance Tools
+- **Hardware Acceleration Profiles**: `Playback → Hardware Acceleration` lets you force Auto detection, Intel/AMD VA-API, NVIDIA NVDEC, legacy VDPAU, or fall back to CPU-only decoding. Toggle options on the fly; playback resumes at the same position.
+- **Generate 1080p Proxy**: Use `Playback → Generate 1080p Proxy...` (or `Ctrl+Alt+P`) to create a lighter H.264 copy of the current video for smoother playback. Progress appears in the status footer; click the resulting 🎬 chip to open the proxy once it finishes.
 
 #### Translation Tips
 - The dialog can be closed safely once the footer chip shows completion; closing mid-process will ask to cancel first.
