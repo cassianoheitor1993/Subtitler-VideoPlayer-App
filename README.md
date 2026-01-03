@@ -77,24 +77,49 @@ Comprehensive documentation is available in the [`docs/`](docs/) directory:
 - **[Deployment](docs/deployment/)** - Publishing and distribution
 - **[User Guides](docs/guides/)** - AI subtitles, API setup, and more
 
-## 🚀 Quick Start
+## 🚀 Installation
 
-### Prerequisites
-- **FFmpeg**: Required for generating 1080p proxy files (optional but recommended)
+### Method 1: Automated Installation (Recommended)
+The easiest way to install SubtitlePlayer and all its dependencies:
 
-### Installation
-- **Ctrl+Alt+P**: Generate 1080p proxy of the current video
+```bash
 git clone https://github.com/cassianoheitor1993/Subtitler-VideoPlayer-App.git SubtitlePlayer
 cd SubtitlePlayer
-
-# Run the automated setup
-./run.sh
+chmod +x scripts/install.sh
+./scripts/install.sh
 ```
 
-The `run.sh` script will:
-1. Create a virtual environment
-2. Install all Python dependencies
-3. Launch the application
+This script will:
+1. Check for system dependencies (Python 3, VLC)
+2. Create a virtual environment
+3. Install all Python dependencies
+4. Install the `subtitleplayer` package
+5. Optionally create a desktop entry for your application menu
+
+### Method 2: Snap Package (Ubuntu/Debian/Fedora)
+If you have `snapd` installed, you can build and install the snap:
+
+```bash
+# Build the snap (requires snapcraft)
+snapcraft --use-lxd
+
+# Install the built snap
+sudo snap install ./subtitleplayer_1.1.0_amd64.snap --dangerous
+```
+
+### Method 3: Manual Installation
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install .
+```
+
+## 🏃 Running the Application
+After installation, you can run SubtitlePlayer in several ways:
+
+1. **From Application Menu**: Search for "SubtitlePlayer" (if desktop entry was created)
+2. **Using the launcher**: `./run.sh`
+3. **Directly**: `subtitleplayer` (if virtual environment is active)
 
 ### Get OpenSubtitles API Key
 
@@ -182,7 +207,7 @@ SubtitlePlayer/
 ├── requirements.txt             # Core dependencies
 ├── requirements-full.txt        # All dependencies (including AI)
 │
-├── src/                         # Source code
+├── subtitleplayer/              # Source code
 │   ├── video_player.py          # Main player window
 │   ├── subtitle_settings_sidebar.py  # Modern sidebar UI
 │   ├── opensubtitles_api.py     # OpenSubtitles API client

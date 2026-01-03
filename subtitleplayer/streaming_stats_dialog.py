@@ -18,7 +18,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
-from debug_logger import debug_logger, EVENTS_FILE, LOG_DIR, STATS_FILE
+from .debug_logger import debug_logger, EVENTS_FILE, LOG_DIR, STATS_FILE
 
 
 class StreamingStatsDialog(QDialog):

@@ -26,13 +26,13 @@ os.environ['VLC_VERBOSE'] = '-1'
 import warnings
 warnings.filterwarnings('ignore')
 
-from subtitle_parser import SubtitleParser, SubtitleEntry
-from config_manager import ConfigManager, SubtitleStyle
-from ffmpeg_casting_manager import FFmpegCastingManager, FFmpegCastingError, FFmpegCastingConfig
-from streaming_stats_dialog import StreamingStatsDialog
-from background_task_manager import BackgroundTaskManager, TaskInfo, TaskStatus, TaskType
-from stats_footer import StatsFooter
-from debug_logger import debug_logger
+from .subtitle_parser import SubtitleParser, SubtitleEntry
+from .config_manager import ConfigManager, SubtitleStyle
+from .ffmpeg_casting_manager import FFmpegCastingManager, FFmpegCastingError, FFmpegCastingConfig
+from .streaming_stats_dialog import StreamingStatsDialog
+from .background_task_manager import BackgroundTaskManager, TaskInfo, TaskStatus, TaskType
+from .stats_footer import StatsFooter
+from .debug_logger import debug_logger
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SAMPLE_VIDEO_PATH = PROJECT_ROOT / "temp" / "sample.mp4"
@@ -221,7 +221,7 @@ class VideoPlayer(QMainWindow):
         super().__init__()
         
         # Initialize resource manager first
-        from resource_manager import get_resource_manager
+        from .resource_manager import get_resource_manager
         self.resource_manager = get_resource_manager()
         
         self.config_manager = ConfigManager()
@@ -340,7 +340,7 @@ class VideoPlayer(QMainWindow):
         left_layout.addWidget(self.video_frame, stretch=1)
 
         # Right side - subtitle settings sidebar container
-        from subtitle_settings_sidebar import SubtitleSettingsSidebar
+        from .subtitle_settings_sidebar import SubtitleSettingsSidebar
         self.sidebar_container = QWidget()
         self.sidebar_container.setMinimumWidth(260)
         self.sidebar_container.setMaximumWidth(480)
@@ -812,6 +812,7 @@ class VideoPlayer(QMainWindow):
             f'--avcodec-hw={hw_flag}',
             '--no-sub-autodetect-file',
             '--sub-track=-1',
+            '--no-mouse-events',  # Prevent VLC from stealing mouse events
         ]
 
         old_player = getattr(self, 'media_player', None)
@@ -1824,6 +1825,15 @@ class VideoPlayer(QMainWindow):
     
     def update_ui(self):
         """Update UI elements (called by timer)"""
+        # Fail-safe: show controls if mouse is in the bottom area
+        if self.isActiveWindow():
+            mouse_pos = self.mapFromGlobal(self.cursor().pos())
+            if self.rect().contains(mouse_pos) and mouse_pos.y() > self.height() * 0.85:
+                if not self.controls_visible:
+                    self.show_controls()
+                    if self.media_player.is_playing():
+                        self.mouse_move_timer.start()
+
         # Update position slider
         media_pos = int(self.media_player.get_position() * 1000)
         self.position_slider.setValue(media_pos)
@@ -1906,8 +1916,8 @@ class VideoPlayer(QMainWindow):
             return
             
         # Don't hide if mouse is over controls or sidebar is visible
-        mouse_pos = self.mapFromGlobal(self.cursor().pos())
-        if self.control_panel.geometry().contains(mouse_pos):
+        mouse_pos = self.control_panel.mapFromGlobal(self.cursor().pos())
+        if self.control_panel.rect().contains(mouse_pos):
             # Mouse is over controls, restart timer
             self.mouse_move_timer.start()
             return
@@ -1917,9 +1927,10 @@ class VideoPlayer(QMainWindow):
             # Don't hide menu/status when sidebar is visible, only control panel
             self.control_panel.hide()
         else:
-            # Hide everything for immersive experience
-            self.menuBar().hide()
-            self.statusBar().hide()
+            # Only hide menu and status bar in fullscreen
+            if self.isFullScreen():
+                self.menuBar().hide()
+                self.statusBar().hide()
             self.control_panel.hide()
         
         self.controls_visible = False
@@ -1959,11 +1970,22 @@ class VideoPlayer(QMainWindow):
         super().keyPressEvent(event)
     
     def eventFilter(self, obj, event):
-        """Global event filter to catch ESC key in fullscreen"""
+        """Global event filter to catch ESC key and show controls on activity"""
         if event.type() == event.Type.KeyPress:
+            # Show controls on any key press
+            self.show_controls()
+            if self.media_player.is_playing():
+                self.mouse_move_timer.start()
+            
             if event.key() == Qt.Key.Key_Escape and self.isFullScreen():
                 self.toggle_fullscreen()
                 return True
+        
+        elif event.type() == event.Type.MouseMove:
+            # Show controls on mouse move if window is active
+            if self.isActiveWindow():
+                self.on_video_mouse_move()
+                
         return super().eventFilter(obj, event)
     
     def video_double_click(self, event):
@@ -2258,7 +2280,7 @@ class VideoPlayer(QMainWindow):
     def show_subtitle_search(self):
         """Show subtitle search dialog"""
         # Import here to avoid circular dependency
-        from subtitle_search_dialog import SubtitleSearchDialog
+        from .subtitle_search_dialog import SubtitleSearchDialog
         
         if not self.current_video:
             QMessageBox.information(self, "No Video", "Please load a video first")
@@ -2314,7 +2336,7 @@ class VideoPlayer(QMainWindow):
         if not task_info:
             return
         
-        from background_task_manager import TaskType
+        from .background_task_manager import TaskType
         
         # Try to restore the associated dialog
         if task_info.task_type == TaskType.AI_GENERATION:
@@ -2348,7 +2370,7 @@ class VideoPlayer(QMainWindow):
     def show_subtitle_settings(self):
         """Show subtitle settings dialog"""
         # Import here to avoid circular dependency
-        from subtitle_settings_dialog import SubtitleSettingsDialog
+        from .subtitle_settings_dialog import SubtitleSettingsDialog
 
         if self.subtitle_settings_dialog and self.subtitle_settings_dialog.isVisible():
             self.subtitle_settings_dialog.raise_()
@@ -2404,8 +2426,8 @@ class VideoPlayer(QMainWindow):
             return
         
         try:
-            from ai_subtitle_dialog import AISubtitleDialog
-            from ai_subtitle_generator import AISubtitleGenerator
+            from .ai_subtitle_dialog import AISubtitleDialog
+            from .ai_subtitle_generator import AISubtitleGenerator
             
             # Pass task_manager and resource_manager for background mode and optimization
             dialog = AISubtitleDialog(self.current_video, self, self.task_manager)
@@ -2434,7 +2456,7 @@ class VideoPlayer(QMainWindow):
     def on_ai_dialog_finished(self, dialog, result):
         """Handle AI dialog finished (accepted or rejected)"""
         if result and dialog.generated_segments:
-            from ai_subtitle_generator import AISubtitleGenerator
+            from .ai_subtitle_generator import AISubtitleGenerator
             segments = dialog.get_generated_segments()
             subtitle_path = dialog.get_subtitle_path()
             generator = AISubtitleGenerator(resource_manager=self.resource_manager)

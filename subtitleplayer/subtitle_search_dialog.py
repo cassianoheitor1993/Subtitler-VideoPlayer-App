@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 
-from opensubtitles_api import OpenSubtitlesAPI
+from .opensubtitles_api import OpenSubtitlesAPI
 
 
 class SubtitleSearchThread(QThread):
@@ -278,14 +278,14 @@ class SubtitleSearchDialog(QDialog):
     
     def load_api_key(self):
         """Load saved API key"""
-        from config_manager import ConfigManager
+        from .config_manager import ConfigManager
         config_manager = ConfigManager()
         if config_manager.config.api_key:
             self.api_key_input.setText(config_manager.config.api_key)
     
     def save_api_key(self):
         """Save API key"""
-        from config_manager import ConfigManager
+        from .config_manager import ConfigManager
         config_manager = ConfigManager()
         config_manager.config.api_key = self.api_key_input.text()
         config_manager.save_config()

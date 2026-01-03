@@ -71,7 +71,7 @@ class SubtitleTranslator:
         """
         # Import here to avoid circular dependency
         if resource_manager is None:
-            from resource_manager import get_resource_manager
+            from .resource_manager import get_resource_manager
             resource_manager = get_resource_manager()
         
         self.resource_manager = resource_manager

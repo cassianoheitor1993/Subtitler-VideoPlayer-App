@@ -1,8 +1,8 @@
 {
   "totals": {
-    "events": 171,
+    "events": 177,
     "sample_autoplay_starts": 17,
-    "video_loads": 51,
+    "video_loads": 54,
     "cast_starts": 28,
     "autoplay_casts": 16,
     "cast_stops": 21
@@ -91,11 +91,21 @@
       "last_loaded_at": "2025-10-20T18:22:29.557399+00:00",
       "last_source": "user",
       "loop_enabled": false
+    },
+    "/home/cmedeiros/Downloads/Devil.in.Disguise.John.Wayne.Gacy.S01E02.1080p.WEB.h264-GRACE[EZTVx.to].mkv": {
+      "video_path": "/home/cmedeiros/Downloads/Devil.in.Disguise.John.Wayne.Gacy.S01E02.1080p.WEB.h264-GRACE[EZTVx.to].mkv",
+      "video_name": "Devil.in.Disguise.John.Wayne.Gacy.S01E02.1080p.WEB.h264-GRACE[EZTVx.to].mkv",
+      "loads": 3,
+      "casts_started": 0,
+      "casts_stopped": 0,
+      "last_loaded_at": "2026-01-03T22:23:02.599384+00:00",
+      "last_source": "user",
+      "loop_enabled": false
     }
   },
   "video_sources": {
     "sample_autoplay": 17,
-    "user": 34
+    "user": 37
   },
   "cast_sources": {
     "sample_autoplay": 16,
@@ -486,6 +496,45 @@
       "cast_stops": 0,
       "autoplay_starts": 0,
       "last_event_at": "2025-10-20T18:22:29.564391+00:00"
+    },
+    "3538ac00-dd9a-4468-9738-5027a750e04c": {
+      "session_id": "3538ac00-dd9a-4468-9738-5027a750e04c",
+      "started_at": "2026-01-03T21:44:56.986787+00:00",
+      "events": 0,
+      "video_loads": 0,
+      "cast_starts": 0,
+      "cast_stops": 0,
+      "autoplay_starts": 0
+    },
+    "f229fd94-dd30-440b-b2c5-17bcd3b4e086": {
+      "session_id": "f229fd94-dd30-440b-b2c5-17bcd3b4e086",
+      "started_at": "2026-01-03T21:53:54.240899+00:00",
+      "events": 2,
+      "video_loads": 1,
+      "cast_starts": 0,
+      "cast_stops": 0,
+      "autoplay_starts": 0,
+      "last_event_at": "2026-01-03T22:01:28.156217+00:00"
+    },
+    "7478ef2d-9486-42b6-a8fb-17da905fa419": {
+      "session_id": "7478ef2d-9486-42b6-a8fb-17da905fa419",
+      "started_at": "2026-01-03T22:05:28.309137+00:00",
+      "events": 2,
+      "video_loads": 1,
+      "cast_starts": 0,
+      "cast_stops": 0,
+      "autoplay_starts": 0,
+      "last_event_at": "2026-01-03T22:05:42.768849+00:00"
+    },
+    "35145637-3968-462d-83df-1645c38eb34b": {
+      "session_id": "35145637-3968-462d-83df-1645c38eb34b",
+      "started_at": "2026-01-03T22:22:49.813520+00:00",
+      "events": 2,
+      "video_loads": 1,
+      "cast_starts": 0,
+      "cast_stops": 0,
+      "autoplay_starts": 0,
+      "last_event_at": "2026-01-03T22:23:02.603934+00:00"
     }
   },
   "session_order": [
@@ -527,19 +576,23 @@
     "774a0818-1011-4e36-ab7e-c8c2ca210217",
     "d825778f-38a4-46ef-8a68-787de0c28722",
     "46f6082f-99a5-4415-8fa7-a09a12a64ffb",
-    "2846cc4c-01a9-469b-971f-3a820427bea2"
+    "2846cc4c-01a9-469b-971f-3a820427bea2",
+    "3538ac00-dd9a-4468-9738-5027a750e04c",
+    "f229fd94-dd30-440b-b2c5-17bcd3b4e086",
+    "7478ef2d-9486-42b6-a8fb-17da905fa419",
+    "35145637-3968-462d-83df-1645c38eb34b"
   ],
-  "last_session_started_at": "2025-10-20T18:22:15.344364+00:00",
+  "last_session_started_at": "2026-01-03T22:22:49.813520+00:00",
   "last_event": {
-    "timestamp": "2025-10-20T18:22:29.564391+00:00",
-    "session_id": "2846cc4c-01a9-469b-971f-3a820427bea2",
+    "timestamp": "2026-01-03T22:23:02.603934+00:00",
+    "session_id": "35145637-3968-462d-83df-1645c38eb34b",
     "event": "subtitle_linked",
     "data": {
-      "video_path": "/home/cmedeiros/Downloads/Weapons.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi.TrueHD.Atmos.7.1.H265-BEN.THE.MEN/Weapons.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi[Ben The Men].mkv",
-      "video_name": "Weapons.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi[Ben The Men].mkv",
-      "subtitle_path": "/home/cmedeiros/Downloads/Weapons.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi.TrueHD.Atmos.7.1.H265-BEN.THE.MEN/Weapons.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi[Ben The Men].srt",
-      "subtitle_name": "Weapons.2025.2160p.UHD.BluRay.REMUX.DV.P7.HDR.MULTi[Ben The Men].srt"
+      "video_path": "/home/cmedeiros/Downloads/Devil.in.Disguise.John.Wayne.Gacy.S01E02.1080p.WEB.h264-GRACE[EZTVx.to].mkv",
+      "video_name": "Devil.in.Disguise.John.Wayne.Gacy.S01E02.1080p.WEB.h264-GRACE[EZTVx.to].mkv",
+      "subtitle_path": "/home/cmedeiros/Downloads/Devil.in.Disguise.John.Wayne.Gacy.S01E02.1080p.WEB.h264-GRACE[EZTVx.to].srt",
+      "subtitle_name": "Devil.in.Disguise.John.Wayne.Gacy.S01E02.1080p.WEB.h264-GRACE[EZTVx.to].srt"
     }
   },
-  "last_updated_at": "2025-10-20T18:22:29.564391+00:00"
+  "last_updated_at": "2026-01-03T22:23:02.603934+00:00"
 }

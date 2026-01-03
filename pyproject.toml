@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "subtitleplayer"
+version = "1.1.0"
+authors = [
+  { name="SubtitlePlayer Project", email="info@subtitleplayer.org" },
+]
+description = "Professional video player with subtitle download and AI generation"
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Topic :: Multimedia :: Video :: Display",
+]
+dependencies = [
+    "PyQt6>=6.6.0",
+    "PyQt6-Qt6>=6.6.0",
+    "python-vlc>=3.0.18121",
+    "requests>=2.31.0",
+    "chardet>=5.2.0",
+    "pysrt>=1.1.2",
+    "psutil>=5.9.0",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/cmedeiros/SubtitlePlayer"
+"Bug Tracker" = "https://github.com/cmedeiros/SubtitlePlayer/issues"
+
+[project.scripts]
+subtitleplayer = "subtitleplayer.video_player:main"
+
+[tool.setuptools]
+packages = ["subtitleplayer"]

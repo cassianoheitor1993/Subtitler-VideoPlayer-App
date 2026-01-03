@@ -62,12 +62,12 @@ def check_project_structure():
         "run.sh",
         "install.sh",
         "README.md",
-        "src/video_player.py",
-        "src/opensubtitles_api.py",
-        "src/subtitle_parser.py",
-        "src/subtitle_search_dialog.py",
-        "src/subtitle_settings_dialog.py",
-        "src/config_manager.py"
+        "subtitleplayer/video_player.py",
+        "subtitleplayer/opensubtitles_api.py",
+        "subtitleplayer/subtitle_parser.py",
+        "subtitleplayer/subtitle_search_dialog.py",
+        "subtitleplayer/subtitle_settings_dialog.py",
+        "subtitleplayer/config_manager.py"
     ]
     
     all_exist = True

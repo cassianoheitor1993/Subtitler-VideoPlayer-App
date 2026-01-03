@@ -73,10 +73,10 @@ We follow PEP 8 with some modifications:
 
 ```bash
 # Format code with black
-black src/ tests/
+black subtitleplayer/ tests/
 
 # Check with flake8
-flake8 src/ tests/
+flake8 subtitleplayer/ tests/
 ```
 
 ### Naming Conventions
@@ -109,7 +109,7 @@ pytest tests/ -v
 pytest tests/test_subtitle_parser.py -v
 
 # Run with coverage
-pytest tests/ --cov=src --cov-report=html
+pytest tests/ --cov=subtitleplayer --cov-report=html
 ```
 
 ## Git Commit Messages
@@ -133,7 +133,7 @@ Add click-to-seek functionality to timeline
 
 ```
 SubtitlePlayer/
-├── src/                    # Source code
+├── subtitleplayer/         # Source code
 │   ├── video_player.py     # Main application
 │   ├── subtitle_parser.py  # Subtitle format parsing
 │   ├── opensubtitles_api.py # API integration

@@ -9,8 +9,8 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 
-from ai_subtitle_generator import AISubtitleGenerator, SubtitleSegment
-from background_task_manager import BackgroundTaskManager, TaskType
+from .ai_subtitle_generator import AISubtitleGenerator, SubtitleSegment
+from .background_task_manager import BackgroundTaskManager, TaskType
 from typing import List, Optional
 
 

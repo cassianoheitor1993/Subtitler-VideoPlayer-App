@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QSize, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QResizeEvent
 
-from config_manager import SubtitleStyle
+from .config_manager import SubtitleStyle
 
 
 class ColorButton(QPushButton):
@@ -652,7 +652,7 @@ class SubtitleSettingsDialog(QDialog):
         
         # Check if translation module is available
         try:
-            from subtitle_translator import SubtitleTranslator
+            from .subtitle_translator import SubtitleTranslator
         except ImportError:
             QMessageBox.information(
                 self,
@@ -779,7 +779,7 @@ class SubtitleSettingsDialog(QDialog):
                 return
             
             # Save translated subtitles to file
-            from subtitle_parser import SubtitleParser
+            from .subtitle_parser import SubtitleParser
             parser = SubtitleParser()
             
             # Determine format from extension

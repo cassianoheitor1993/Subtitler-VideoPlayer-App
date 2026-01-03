@@ -73,11 +73,24 @@ echo ""
 echo "Installing Python dependencies..."
 pip install -r requirements.txt
 
+# Install the package in editable mode
+echo "Installing SubtitlePlayer package..."
+pip install -e .
+
 if [ $? -eq 0 ]; then
     echo ""
     echo "=========================================="
     echo "  ✓ Installation Complete!"
     echo "=========================================="
+    echo ""
+    
+    # Create desktop entry
+    read -p "Would you like to create a desktop entry? (y/n): " create_desktop
+    if [[ $create_desktop == "y" || $create_desktop == "Y" ]]; then
+        chmod +x scripts/create-desktop-entry.sh
+        ./scripts/create-desktop-entry.sh
+    fi
+
     echo ""
     echo "To run SubtitlePlayer:"
     echo "  1. Make the launcher executable: chmod +x run.sh"

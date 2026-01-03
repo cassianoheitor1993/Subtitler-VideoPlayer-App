@@ -8,7 +8,7 @@ echo "======================================"
 echo ""
 
 # Check if we're in the right directory
-if [ ! -f "src/video_player.py" ]; then
+if [ ! -f "subtitleplayer/video_player.py" ]; then
     echo "❌ Error: Not in SubtitlePlayer directory"
     echo "Please run this script from the SubtitlePlayer root directory"
     exit 1

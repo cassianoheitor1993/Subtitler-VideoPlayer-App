@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QFont, QCursor
-from background_task_manager import TaskInfo, TaskStatus, TaskType
+from .background_task_manager import TaskInfo, TaskStatus, TaskType
 
 
 class TaskIndicator(QFrame):
